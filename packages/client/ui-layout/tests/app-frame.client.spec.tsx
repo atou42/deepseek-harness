@@ -294,26 +294,47 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
     expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
   })
 
-  it('narrow toggle re-expands over the squeezed center and back', () => {
+  it('narrow toggle opens a floating overlay without squeezing the center', () => {
     frameWidth = 980
-    const { frame, instance } = mountFrame()
-    act(() => { instance.actions.toggleSidebar() })
-    expect(tracks(frame)).toEqual([280, 0])
-    expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(false)
-    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
+    const { frame, instance, slotCalls } = mountFrame()
     act(() => { instance.actions.toggleSidebar() })
     expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
+    expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(true)
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(true)
+    expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props).toEqual({ collapsed: false, width: 280 })
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
+    expect(frame.querySelector('[class*="sidebarMask"]')).toBeTruthy()
+    act(() => { instance.actions.toggleSidebar() })
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(false)
   })
 
-  it('a wide-closed preference re-expands at the contract default while narrow', () => {
+  it('a wide-closed preference still overlays at the contract default while narrow', () => {
     frameWidth = 1920
     const { frame, instance } = mountFrame()
     act(() => { instance.actions.toggleSidebar() }) // close while wide: preference 0
     frameWidth = 980
     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
     act(() => { instance.actions.toggleSidebar() })
-    expect(tracks(frame)).toEqual([280, 0])
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(true)
     expect(instance.getSnapshot().sidebar).toBe(0) // preference untouched
+  })
+
+  it('dismissing the overlay or switching sessions restores the rail without a reflow', () => {
+    frameWidth = 980
+    const { frame, instance, rerenderFrame } = mountFrame()
+    act(() => { instance.actions.toggleSidebar() })
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(true)
+    act(() => { instance.actions.dismissNarrowSidebar() })
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(false)
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
+
+    act(() => { instance.actions.toggleSidebar() })
+    selectedSession.current = 's-next' as SessionId
+    act(() => { rerenderFrame() })
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(false)
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
   })
 
   it('shrinking across the breakpoint auto-collapses; re-widening restores the drag width', () => {

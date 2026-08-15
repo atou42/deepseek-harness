@@ -50,7 +50,7 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().sidebar).toBe(SIDEBAR_DEFAULT)
   })
 
-  it('narrow toggleSidebar flips only the re-expand override; the width preference survives', () => {
+  it('narrow toggleSidebar flips only the overlay override; the width preference survives', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setSidebar(400)
     actions.setNarrow(true)
@@ -59,6 +59,17 @@ describe('createLayoutStore', () => {
     actions.toggleSidebar()
     expect(store.getSnapshot().narrowExpanded).toBe(false)
     expect(store.getSnapshot().sidebar).toBe(400)
+  })
+
+  it('dismissNarrowSidebar closes only the overlay override', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setSidebar(400)
+    actions.setNarrow(true)
+    actions.toggleSidebar()
+    actions.dismissNarrowSidebar()
+    expect(store.getSnapshot()).toEqual({ sidebar: 400, details: 0, narrow: true, narrowExpanded: false })
+    actions.dismissNarrowSidebar()
+    expect(store.getSnapshot().narrowExpanded).toBe(false)
   })
 
   it('crossing the breakpoint drops the override; a same-value setNarrow keeps it', () => {

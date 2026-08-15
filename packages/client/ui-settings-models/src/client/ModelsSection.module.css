@@ -12,7 +12,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 720px;
+  max-width: min(720px, 100%);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -70,6 +70,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .rowIdentity {
@@ -77,9 +78,14 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .rowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
@@ -119,6 +125,7 @@
 
 .rowActions {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
   margin-left: auto;
@@ -630,6 +637,26 @@ select.input {
 @media (prefers-reduced-motion: reduce) {
   .customizedSummary::before {
     transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .rowHead {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .rowIdentity {
+    flex: 1 1 100%;
+  }
+
+  .rowActions {
+    margin-left: 0;
+  }
+
+  .addButton {
+    min-width: 0;
+    flex: 1 1 100%;
   }
 }
 

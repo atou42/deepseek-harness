@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT, SIDEBAR_MIN } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
@@ -91,6 +91,7 @@ export function AppFrame({
   renderSlot,
 }: AppFrameProps) {
   const panels = useStore(s => s)
+  const currentSession = useSessions(s => s.current)
   const detailsSession = useSessions((s) => {
     const current = s.current
     return current !== undefined && s.byId[current]?.blank === false ? current : undefined
@@ -98,14 +99,22 @@ export function AppFrame({
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
 
-  const lastSession = useRef(detailsSession)
+  const lastDetailsSession = useRef(detailsSession)
   useLayoutEffect(() => {
     if (detailsSession === undefined) return
-    if (lastSession.current !== undefined && lastSession.current !== detailsSession) {
+    if (lastDetailsSession.current !== undefined && lastDetailsSession.current !== detailsSession) {
       actions.closeDetails()
     }
-    lastSession.current = detailsSession
+    lastDetailsSession.current = detailsSession
   }, [actions, detailsSession])
+
+  const lastCurrentSession = useRef(currentSession)
+  useLayoutEffect(() => {
+    if (lastCurrentSession.current !== currentSession) {
+      actions.dismissNarrowSidebar()
+    }
+    lastCurrentSession.current = currentSession
+  }, [actions, currentSession])
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
   useEffect(() => {
@@ -127,19 +136,22 @@ export function AppFrame({
     }
   }, [])
 
-  // Narrow viewports auto-collapse the sidebar; the store mirror keeps
-  // toggleSidebar's semantics right (narrow toggles flip the manual
-  // re-expand override, stores.ts). Collapsed is decided here, so the
-  // solver stays breakpoint-free: a narrow re-expand passes the preference
-  // (or the default when the wide preference is closed) and the center
-  // absorbs the squeeze.
+  // Narrow viewports auto-collapse the sidebar to the rail. The store
+  // mirror keeps toggleSidebar's semantics right (narrow toggles flip
+  // the overlay override, stores.ts). The solver stays breakpoint-free:
+  // a narrow overlay never takes a grid track, so the center keeps the
+  // remaining width beside the rail.
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
-  const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
-  const sidebarPreference = sidebarCollapsed
-    ? 0
-    : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
+  const sidebarOverlay = narrow && panels.narrowExpanded
+  const sidebarPreference = (narrow || panels.sidebar === 0) ? 0 : panels.sidebar
   const cols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
+  const overlayWidth = Math.min(
+    panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar,
+    Math.max(SIDEBAR_MIN, viewport - 48),
+  )
+  const sidebarWidth = sidebarOverlay ? overlayWidth : cols.sidebar
+  const railCollapsed = cols.sidebar === SIDEBAR_COLLAPSED
   const colsRef = useRef(cols)
   colsRef.current = cols
 
@@ -152,7 +164,10 @@ export function AppFrame({
   // detach the column edge from the pointer (AppFrame.module.css).
   const [dragging, setDragging] = useState(false)
   const onDragEnd = useCallback(() => { setDragging(false) }, [])
-  const onSidebarStart = useCallback(() => { sidebarBase.current = colsRef.current.sidebar; setDragging(true) }, [])
+  const onSidebarStart = useCallback(() => {
+    sidebarBase.current = sidebarOverlay ? overlayWidth : colsRef.current.sidebar
+    setDragging(true)
+  }, [overlayWidth, sidebarOverlay])
   const onDetailsStart = useCallback(() => { detailsBase.current = colsRef.current.details; setDragging(true) }, [])
   const onSidebarDrag = useCallback((dx: number) => {
     actions.setSidebar(sidebarBase.current + dx)
@@ -166,7 +181,8 @@ export function AppFrame({
       ref={frameRef}
       className={css.frame}
       style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
-      data-sidebar-collapsed={sidebarCollapsed || undefined}
+      data-sidebar-collapsed={railCollapsed || undefined}
+      data-sidebar-overlay={sidebarOverlay || undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
     >
@@ -175,12 +191,20 @@ export function AppFrame({
             sidebar keeps the mounted slot at the compact-rail width, and the
             component sees its rendered state as owner params decided here
             (collapsed follows the resolved rail, so a derived auto-collapse
-            renders the rail UI too). */}
+            renders the rail UI too). A narrow overlay still reports the
+            drawer as wide so the session list is usable. */}
         {renderSlot('sidebar', {
-          collapsed: sidebarCollapsed,
-          width: cols.sidebar,
+          collapsed: !sidebarOverlay && railCollapsed,
+          width: sidebarWidth,
         })}
       </div>
+      {sidebarOverlay && (
+        <div
+          className={css.sidebarMask}
+          role="presentation"
+          onClick={() => { actions.dismissNarrowSidebar() }}
+        />
+      )}
       <>
         {/* Both column occupants stay at fixed tree positions from first
             paint — no loading gate: a bare status line reads worse than
@@ -194,7 +218,15 @@ export function AppFrame({
         {renderSlot('shell.overlay', {})}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {(!railCollapsed || sidebarOverlay) && (
+        <DragHandle
+          side="sidebar"
+          left={sidebarWidth}
+          onStart={onSidebarStart}
+          onDrag={onSidebarDrag}
+          onEnd={onDragEnd}
+        />
+      )}
       {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
     </div>
   )

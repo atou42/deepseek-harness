@@ -17,8 +17,8 @@ import {
  * Layout store state: panel width preferences in px (0 = closed), plus the
  * narrow-viewport pair — `narrow` mirrors AppFrame's breakpoint reading
  * (viewport < SIDEBAR_AUTO_COLLAPSE) so toggleSidebar can pick semantics, and
- * `narrowExpanded` is the manual override that re-expands the auto-collapsed
- * sidebar over the squeezed center without rewriting the width preference.
+ * `narrowExpanded` is the manual override that opens the auto-collapsed
+ * sidebar as a floating overlay without rewriting the width preference.
  */
 type LayoutState = { sidebar: number; details: number; narrow: boolean; narrowExpanded: boolean }
 
@@ -31,6 +31,7 @@ type LayoutActions = {
   setDetails: (draft: LayoutState, px: number) => void
   toggleSidebar: (draft: LayoutState) => void
   setNarrow: (draft: LayoutState, narrow: boolean) => void
+  dismissNarrowSidebar: (draft: LayoutState) => void
   openDetails: (draft: LayoutState) => void
   closeDetails: (draft: LayoutState) => void
 }
@@ -64,6 +65,8 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
         d.narrow = narrow
         d.narrowExpanded = false
       },
+      // Overlay-only: leave the wide preference and the rail alone.
+      dismissNarrowSidebar: (d) => { d.narrowExpanded = false },
       openDetails: (d) => { if (d.details === 0) d.details = DETAILS_DEFAULT },
       closeDetails: (d) => { d.details = 0 },
     },

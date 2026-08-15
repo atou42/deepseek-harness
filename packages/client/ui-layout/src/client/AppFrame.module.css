@@ -29,6 +29,34 @@
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
 
+/* Narrow overlay: the grid item stays on the compact rail track so the
+   conversation never reflows. The wide sidebar paints out of that cell. */
+.frame[data-sidebar-overlay] .sidebarCol {
+  z-index: 21;
+  overflow: visible;
+  background: transparent;
+  border-right: none;
+}
+
+.frame[data-sidebar-overlay] .sidebarCol > * {
+  height: 100%;
+  max-width: calc(100vw - 48px);
+  background: var(--dsw-specific-sidebar-fill);
+  border-right: 1px solid var(--dsw-alias-border-l1);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+.sidebarMask {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  padding: 0;
+  border: none;
+  background: var(--dsw-alias-bg-mask-1);
+  backdrop-filter: var(--dsw-mask-blur);
+  cursor: pointer;
+}
+
 .centerCol {
   min-width: 0;
   display: flex;
@@ -63,6 +91,10 @@
   /* Rides the same curve as the tracks so the pill stays on the moving
      border during collapse/expand; paused while dragging (frame rule). */
   transition: left var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.frame[data-sidebar-overlay] .handle[data-side='sidebar'] {
+  z-index: 22;
 }
 
 .frame[data-dragging] .handle {

@@ -89,4 +89,12 @@ describe('ModelsSection theme styles', () => {
     // branch, and a literal here is a single colour for both themes.
     expect(css).not.toMatch(/var\(--dsw-[a-z0-9-]+\s*,\s*(?:#|rgb|rgba|hsl|hsla)/)
   })
+
+  it('wraps provider controls without letting long names widen the phone sheet', () => {
+    expect(css).toMatch(/@media \(max-width: 720px\)/)
+    expect([...css.matchAll(/^[ \t]*\.rowHead \{([^}]*)\}/gm)].map(match => match[1] ?? ''))
+      .toContainEqual(expect.stringMatching(/flex-wrap:\s*wrap/))
+    expect(block('.rowName')).toContain('text-overflow: ellipsis')
+    expect(block('.rowActions')).toContain('flex: none')
+  })
 })

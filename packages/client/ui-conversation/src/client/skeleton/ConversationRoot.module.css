@@ -363,3 +363,26 @@
 .root[data-phase='settling'] .composerSeat {
   visibility: hidden;
 }
+
+@media (max-width: 720px) {
+  .header {
+    padding: 8px 12px 0 12px;
+  }
+
+  .titleRow {
+    gap: 8px;
+  }
+
+  .headerUtilities {
+    margin-left: 8px;
+  }
+
+  .tabs {
+    gap: 20px;
+    padding-left: 4px;
+  }
+
+  .crumb {
+    max-width: 140px;
+  }
+}
