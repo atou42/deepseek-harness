@@ -25,6 +25,9 @@
 
     },
     {
+      "path": "../../identity/cohub-account"
+    },
+    {
       "path": "../../extensions/cordis-host-runner"
     },
     {

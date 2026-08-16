@@ -18,4 +18,4 @@ None.
 
 ## Known Limitations and Deferred Work
 
-- No account UI or API projection is included. Poll scheduling belongs to the eventual UI or transport consumer; this service exposes one explicit polling operation and its server-directed retry interval.
+- The Host package exposes token-free account operations through its generated Remote. Browser polling is owned by the optional `@deepseek-ai/dsh-client-cohub-account` package, so Host consumers can use identity without loading that UI.

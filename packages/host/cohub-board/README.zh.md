@@ -6,8 +6,12 @@
 
 ## 模型体验
 
-本包不是模型 Provider，只向可独立加载的 DSH Board 浏览界面提供画布结构。
+无，因为这个 Host 侧 Board 适配器不注册提示词、工具、消息或 Provider 请求。
 
-## 限制
+#### KV Cache 影响
+
+无。
+
+## 已知限制与后续工作
 
 Board 清单由独立的 Cohub Space Provider 发现。暂不提供 Board 编辑和私有二进制资源代理。

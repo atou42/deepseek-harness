@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import commandsRemote from '@deepseek-ai/dsh-commands/remote'
 import goalsRemote from '@deepseek-ai/dsh-goal/remote'
+import cohubAccountRemote from '@deepseek-ai/dsh-cohub-account/remote'
 import cohubBoardRemote from '@deepseek-ai/dsh-cohub-board/remote'
 import cohubSpacesRemote from '@deepseek-ai/dsh-cohub-spaces/remote'
 import dynamicRemote from '@deepseek-ai/dsh-cordis-host-runner/remote'
@@ -14,10 +15,15 @@ export type { TypertClientRemote as ClientRemote } from '@deepseek-ai/dsh-typert
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
+export type {} from '@deepseek-ai/dsh-cohub-account/remote'
 export type {} from '@deepseek-ai/dsh-cohub-board/remote'
 export type {} from '@deepseek-ai/dsh-cohub-spaces/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 export type {} from '@deepseek-ai/dsh-message-feedback/remote'
+export type {
+  CohubAccountProfile, CohubAccountSnapshot, CohubDeviceAuthorization, CohubRemoteLogoutResult,
+} from '@deepseek-ai/dsh-cohub-account/types'
+
 export type {
   CohubBoardConnection, CohubBoardEndpoint, CohubBoardManifest, CohubBoardNode,
   CohubBoardRecord, CohubBoardSnapshot,
@@ -32,6 +38,7 @@ export type { ApiRemoteForwardedEvent } from '../types.ts'
 // signatures `$on` hands to a listener, so a consumer reads the very
 // declaration the Host emits rather than a flattened restatement of it.
 export type {} from '@deepseek-ai/dsh-commands/types'
+export type {} from '@deepseek-ai/dsh-cohub-account/types'
 export type {} from '@deepseek-ai/dsh-cordis-host-runner/types'
 export type {} from '@deepseek-ai/dsh-cohub-board/types'
 export type {} from '@deepseek-ai/dsh-cohub-spaces/types'
@@ -119,7 +126,8 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const disposers: Array<() => Promise<void>> = []
   try {
     for (const contribution of [
-      commandsRemote, goalsRemote, cohubBoardRemote, cohubSpacesRemote, dynamicRemote, pluginInventoryRemote, messageFeedbackRemote,
+      commandsRemote, goalsRemote, cohubAccountRemote, cohubBoardRemote,
+      cohubSpacesRemote, dynamicRemote, pluginInventoryRemote, messageFeedbackRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

@@ -88,6 +88,8 @@ describe('CohubAccountService', () => {
     vi.stubGlobal('fetch', fetchMock)
     const { account } = await boot()
     expect(account.snapshot.getSnapshot()).toEqual({ revision: 0, status: 'anonymous' })
+    expect(account.getAccount()).toEqual({ revision: 0, status: 'anonymous' })
+    expect(account.cancelRemoteLogin()).toEqual({ revision: 0, status: 'anonymous' })
     await expect(account.getAccessToken()).rejects.toMatchObject({ code: 'COHUB_AUTHENTICATION_REQUIRED' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -122,11 +124,11 @@ describe('CohubAccountService', () => {
     vi.stubGlobal('fetch', fetchMock)
     const { account, credentials } = await boot()
 
-    const authorization = await account.beginLogin()
-    expect(authorization.userCode).toBe('ABCD-EFGH')
-    expect(JSON.stringify(account.snapshot.getSnapshot())).not.toContain('private-device')
-    const result = await account.pollLogin()
-    expect(result).toEqual({
+    const began = await account.beginRemoteLogin()
+    expect(began).toMatchObject({ status: 'authenticating', authorization: { userCode: 'ABCD-EFGH' } })
+    expect(JSON.stringify(began)).not.toContain('private-device')
+    const result = await account.pollRemoteLogin()
+    expect(result).toMatchObject({
       status: 'authenticated',
       profile: { userId: 'user-1', email: 'atou@example.test', username: 'atou', displayName: 'ATou' },
     })
@@ -214,7 +216,8 @@ describe('CohubAccountService', () => {
   it('clears local state even when remote logout revocation fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     const { account, credentials } = await boot(stored())
-    const result = await account.logout()
+    const result = await account.logoutRemote()
+    expect(result.snapshot).toMatchObject({ status: 'anonymous' })
     expect(result.revocationWarning).toMatch(/could not be confirmed/)
     expect(credentials.values.has(SESSION_REF)).toBe(false)
     expect(account.snapshot.getSnapshot()).toMatchObject({ status: 'anonymous' })

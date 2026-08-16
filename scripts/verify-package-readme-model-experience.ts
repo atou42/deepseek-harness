@@ -60,6 +60,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/hmr': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/modules': { kind: 'none', reason: 'Browser-side module-loading kernel machinery; registers nothing model-facing.' },
   'packages/client/cohub-spaces': { kind: 'none', reason: 'Browser-side Cohub remote-root provider; registers nothing model-facing.' },
+  'packages/client/ui-cohub-account': { kind: 'none', reason: 'Browser-side token-free account presentation; registers nothing model-facing.' },
   'packages/client/ui-cohub-board': { kind: 'none', reason: 'Browser-side read-only Board presentation; registers nothing model-facing.' },
   'packages/client/remote-roots': { kind: 'none', reason: 'Browser-side provider registry; remote resource data is never injected into model context.' },
   'packages/test-support/client-runtime': { kind: 'none', reason: 'Browser-side test infrastructure (jsdom bench); registers nothing model-facing.' },

@@ -8,6 +8,7 @@ const targets = [
   'packages/llm/llm-cohub/tests',
   'packages/client/remote-roots/tests',
   'packages/client/cohub-spaces/tests',
+  'packages/client/ui-cohub-account/tests',
   'packages/client/ui-cohub-board/tests',
   'packages/client/ui-remote-roots/tests',
   'packages/client/ui-workspace/tests/apply.client.spec.ts',

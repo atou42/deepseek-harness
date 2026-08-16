@@ -50,6 +50,11 @@ export interface CohubLogoutResult {
   readonly revocationWarning?: string
 }
 
+/** Browser-safe result of a Host-owned logout. */
+export interface CohubRemoteLogoutResult extends CohubLogoutResult {
+  readonly snapshot: CohubAccountSnapshot
+}
+
 /** Minimal observable shape used by Host consumers and later API projection. */
 export interface CohubAccountObservable {
   getSnapshot(): CohubAccountSnapshot

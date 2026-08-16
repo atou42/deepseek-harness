@@ -4,6 +4,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
   nonBlank,
   oauthErrorCode,
@@ -23,6 +24,7 @@ import type {
   CohubDeviceAuthorization,
   CohubLoginPollResult,
   CohubLogoutResult,
+  CohubRemoteLogoutResult,
 } from './types.ts'
 
 export type {
@@ -32,6 +34,7 @@ export type {
   CohubDeviceAuthorization,
   CohubLoginPollResult,
   CohubLogoutResult,
+  CohubRemoteLogoutResult,
 } from './types.ts'
 
 export const DEFAULT_COHUB_AUTH_ISSUER = 'https://auth.neta.art'
@@ -134,7 +137,7 @@ async function responseData(response: Response): Promise<unknown> {
 }
 
 /** The only owner of Cohub account secrets and token refresh within one Host. */
-export class CohubAccountService extends Service {
+export class CohubAccountService extends TypertRemoteService {
   static inject = ['credentials']
 
   static Config: z<Config> = z.object({
@@ -192,6 +195,41 @@ export class CohubAccountService extends Service {
     if (stored === undefined) return
     this.session = parseStoredSession(stored.value)
     this.publishAuthenticated(this.session)
+  }
+
+  /** Return the current browser-safe account state. */
+  @Remote('getAccount')
+  getAccount(): CohubAccountSnapshot {
+    this.assertOpen()
+    return this.current
+  }
+
+  /** Start device login without exposing the private device code. */
+  @Remote('beginLogin')
+  async beginRemoteLogin(): Promise<CohubAccountSnapshot> {
+    await this.beginLogin()
+    return this.current
+  }
+
+  /** Advance device login once; the browser controls no tokens or credentials. */
+  @Remote('pollLogin')
+  async pollRemoteLogin(): Promise<CohubAccountSnapshot> {
+    await this.pollLogin()
+    return this.current
+  }
+
+  /** Cancel the active device login and return the resulting public state. */
+  @Remote('cancelLogin')
+  cancelRemoteLogin(): CohubAccountSnapshot {
+    this.cancelLogin()
+    return this.current
+  }
+
+  /** Clear the Host-owned session and report any remote revocation warning. */
+  @Remote('logout')
+  async logoutRemote(): Promise<CohubRemoteLogoutResult> {
+    const result = await this.logout()
+    return Object.freeze({ snapshot: this.current, ...result })
   }
 
   beginLogin(signal?: AbortSignal): Promise<CohubDeviceAuthorization> {

@@ -101,3 +101,17 @@ Five Host tests and four browser tests pass, covering the read-only Remote set, 
 No Cohub code was copied or modified. The Cohub repository was read only as API-contract evidence. No real credential or endpoint was used, and no active profile, main worktree, merge, push, publication, or release was touched.
 
 Next action: add the separately loadable browser login surface for the existing Cohub Account owner, then document optional composition recipes and run final goal acceptance.
+
+## 2026-08-16 · Independently loadable Cohub account surface
+
+The Host-side Cohub Account owner now exposes five Remote operations for account state, device-login start and polling, cancellation, and logout. The browser receives only token-free account snapshots and logout warnings. Tokens and the private device code remain Host-only.
+
+The new `@deepseek-ai/dsh-client-cohub-account` package contributes its own sidebar action and overlay. It renders anonymous, pending authorization, authenticated, transport-failure, and terminal-failure states; exposes only validated HTTP(S) verification links; and unloads without leaving UI or pending account state behind. Other Cohub packages depend on the Host identity service, not this optional UI.
+
+Eleven Host tests and four browser tests pass. The affected packages type-check and build independently; scoped lint reports no errors; workspace and bilingual-document checks pass; and the combined verifier passes 78 acceptance checks. The browser artifact contains no credential-bearing Remote method or account token.
+
+The plugin-family guide records independent compositions for provider-neutral folders, login, Space files, models, multimedia generation, and Board. It intentionally defines no all-in-one bundle.
+
+No real Cohub credential or endpoint was used. No Cohub code, active profile, original worktree, merge, push, publication, or release was touched.
+
+Next action: run final adversarial acceptance and close the goal only if the original worktree remains unchanged.

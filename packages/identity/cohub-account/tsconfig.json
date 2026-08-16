@@ -10,6 +10,7 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
     { "path": "../../credentials/credentials" },
+    { "path": "../../typert/protocol" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]
 }

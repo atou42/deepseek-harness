@@ -6,8 +6,12 @@
 
 ## 模型体验
 
-本包是浏览界面，不是模型 Provider。它组合独立的 Cohub Account、Space 和 Board 适配器。
+无，因为这个浏览器侧 Board 界面不注册提示词、工具、消息或 Provider 请求。
 
-## 限制
+#### KV Cache 影响
+
+无。
+
+## 已知限制与后续工作
 
 第一版可浏览清单并显示 Board 节点和连接，不编辑 Board，不发布 Work，不控制播放，不运行 Cohub Session，也不代理私有二进制资源。
