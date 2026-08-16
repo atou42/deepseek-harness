@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 
 const targets = [
+  'packages/generation/cohub-generation/tests',
   'packages/identity/cohub-account/tests',
   'packages/host/cohub-spaces/tests',
   'packages/llm/llm-cohub/tests',

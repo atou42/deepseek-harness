@@ -77,3 +77,15 @@ Cohub's current raw-completion contract does not accept tool schemas or stop seq
 Ten focused adapter tests pass. Scoped lint, package type-check, package build, Host aggregate type-check, workspace constraints, bilingual README pairing, Model Experience and limitation documentation gates, and the combined 56-check DSH-Cohub verifier also pass. No real credential or endpoint was used. No Cohub code, active profile, main worktree, merge, push, publication, or release was touched.
 
 Next action: implement the separately unloadable Cohub multimedia-generation adapter, then add the Board surface as its own optional package.
+
+## 2026-08-16 · Recoverable Cohub multimedia generation tools
+
+The independently unloadable `@deepseek-ai/dsh-cohub-generation` package now exposes authenticated Cohub multimodal model discovery, one-task create-and-wait generation, and existing-task status recovery as three DSH tools. The package depends on the Cohub Account owner but not on Space/files, Board, browser UI, Cohub Sessions, or Cohub agent execution. Its explicit Space only supplies Cohub authorization, attribution, archiving, and billing context.
+
+The billable create request is never retried. If polling fails, times out, or is cancelled after creation, the error preserves the task ID and the status tool can recover that same task without another charge. Catalogs, declarations, task states, outputs, pricing metadata, and billing results are validated. Generated image URLs are retained; with a DSH attachment store, images are downloaded under strict limits and persisted before becoming model-visible image blocks. Download failure retains the URL with an explicit warning. Video and audio remain provider URLs because this DSH version has no durable attachment seam for them. Inline base64 video or audio fails with the recoverable task ID.
+
+The first test run exposed a real catalog parser defect: the implementation read the declaration object instead of its `content` member and rejected every valid input list. The parser was corrected from that failure evidence. Nine focused tests now pass across catalog validation and hiding, Space-scoped creation, polling and billing, inline image persistence, image-download warning, interrupted-poll recovery without duplicate creation, failed and malformed tasks, 402 rejection, and unload cancellation. Scoped lint, package and Host aggregate type-check, package build, workspace constraints, bilingual documentation checks, and the combined 65-check verifier pass.
+
+No real Cohub credential or endpoint was used. No Cohub code, active profile, main worktree, merge, push, publication, or release was touched.
+
+Next action: add Board as its own optional browser surface, using Cohub identity without turning the Space cloud folder into a local Workspace.
