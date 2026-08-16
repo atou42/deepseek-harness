@@ -17,7 +17,9 @@ export interface RemoteRootCapabilities {
   readonly browse: true
   readonly read: boolean
   readonly write: boolean
-  /** The root can open provider-owned Sessions and start a new conversation. */
+  /** Selecting the root starts an ordinary DSH Session with provider context. */
+  readonly workspace?: boolean
+  /** The root exposes provider-owned Sessions as read-only history. */
   readonly conversation?: boolean
 }
 
@@ -81,15 +83,6 @@ export interface RemoteConversationView {
   readonly turns: readonly RemoteConversationTurn[]
 }
 
-/** Acceptance result for one remote prompt. */
-export interface RemoteConversationPromptResult {
-  readonly rootId: RemoteResourceId
-  readonly sessionId: RemoteResourceId
-  readonly sessionTitle: string
-  readonly turnId: RemoteResourceId
-  readonly turnStatus: string
-}
-
 /** A child entry within a provider-owned root. Parent identities remain opaque. */
 export interface RemoteResourceEntry {
   readonly id: RemoteResourceId
@@ -147,15 +140,13 @@ export interface RemoteRootSource {
     readonly ifRevision: string
     readonly signal?: AbortSignal
   }): Promise<RemoteTextWriteResult>
+  startWorkspace?(request: {
+    readonly rootId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<void>
   readConversation?(request: {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationView>
-  promptConversation?(request: {
-    readonly rootId: RemoteResourceId
-    readonly sessionId?: RemoteResourceId
-    readonly text: string
-    readonly signal?: AbortSignal
-  }): Promise<RemoteConversationPromptResult>
 }

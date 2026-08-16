@@ -179,12 +179,13 @@ export class TestSessions implements ISessions {
    */
   readonly currentProvideInfo: HostObservable<SessionMaybeProvideInfo>
   private readonly records = new Map<SessionId, SessionRecord>()
+  private createdCount = 0
   /** The production provide channel (roster, materialization rules, current projection) — no test-side mirror. */
   private readonly channel: SessionProvideChannel
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
-    method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
+    method: 'create' | 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
       | 'clear' | 'search' | 'fork'
     args: unknown[]
   }[] = []
@@ -396,6 +397,23 @@ export class TestSessions implements ISessions {
     const id = scopeOf(ctx)
     if (id === undefined) return undefined
     return this.records.get(id)?.session
+  }
+
+  /**
+   * Create an ordinary blank fixture session and publish it before resolving.
+   * @param opts - optional production create inputs; only a supplied session id changes fixture identity.
+   * @returns the created fixture session id.
+   */
+  async create(opts: Parameters<ISessions['create']>[0] = {}): Promise<SessionId> {
+    this.calls.push({ method: 'create', args: [opts] })
+    let id = opts.sessionId
+    if (id === undefined) {
+      do {
+        this.createdCount += 1
+        id = `test-created-session-${this.createdCount}` as SessionId
+      } while (this.records.has(id))
+    }
+    return this.add({ id, summary: { blank: true } }, { current: false })
   }
 
   /**

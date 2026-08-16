@@ -37,8 +37,8 @@ export interface WorkspacePickFlowProps {
   useWorkspaces: <S>(selector: (state: WorkspaceListState) => S) => S
   /** Selector hook over provider-owned remote Spaces. */
   useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
-  /** Open a provider-owned remote Space without adopting it as a local Workspace. */
-  activateRemote: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => void
+  /** Start a DSH Session with the selected provider-owned Space attached. */
+  activateRemote: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
   /** Bound occupancy selector hook for this surface's directory-flow hole (empty leaves the surface with no add action). */
@@ -82,7 +82,7 @@ export function WorkspacePickFlow({
   const remoteSnapshot = useRemoteRoots(state => state)
   const workspaces = workspaceSnapshot.items
   const remoteEntries = addOnly ? [] : remoteSnapshot.sources.flatMap(source => source.status === 'ready'
-    ? source.roots.filter(root => root.capabilities.conversation === true).map(root => ({
+    ? source.roots.filter(root => root.capabilities.workspace === true).map(root => ({
       id: JSON.stringify(['remote', source.sourceId, root.id]),
       sourceId: source.sourceId,
       rootId: root.id,
@@ -98,11 +98,12 @@ export function WorkspacePickFlow({
   const [modalError, setModalError] = useState<string | null>(null)
   const [flowOpen, setFlowOpen] = useState(false)
   const [pickingFolder, setPickingFolder] = useState(false)
+  const [activatingRemote, setActivatingRemote] = useState(false)
   // One picking interaction at a time: while the flow is open (native chooser
   // pending, browse dialog up) or its pick is being adopted, every other
   // menu action stays disabled — a late outcome must not race a concurrent
   // selection or adoption.
-  const flowBusy = flowOpen || pickingFolder
+  const flowBusy = flowOpen || pickingFolder || activatingRemote
 
   // The occupied hole gates the picking affordance: with no composed flow the
   // entry simply is not there (the seam's documented no-flow default). The
@@ -204,8 +205,13 @@ export function WorkspacePickFlow({
     }
     const remote = remoteByMenuId.get(id)
     if (remote !== undefined) {
-      activateRemote(remote.sourceId, remote.rootId)
-      onClose()
+      setActivatingRemote(true)
+      void activateRemote(remote.sourceId, remote.rootId).then(() => {
+        onClose()
+      }, (reason: unknown) => {
+        setModalError(reason instanceof Error ? reason.message : String(reason))
+        setErrorOpen(true)
+      }).finally(() => { setActivatingRemote(false) })
       return
     }
     onPick(id as WorkspaceId)

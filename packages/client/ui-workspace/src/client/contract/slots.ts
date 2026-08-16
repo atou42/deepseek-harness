@@ -81,8 +81,8 @@ export type DirectoryFlowSlotName =
  * flow whose occupant unloaded mid-interaction (nobody is left to cancel).
  */
 export type DirectoryPickingInjected = {
-  /** Open a provider-owned remote Space in its conversation workbench. */
-  activateRemote: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => void
+  /** Start a DSH Session with a provider-owned remote Space attached. */
+  activateRemote: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   hooks: {
     /** True while this surface's directory-flow hole is occupied. */
     directoryFlow: HostObservable<boolean>

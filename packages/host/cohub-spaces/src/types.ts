@@ -42,13 +42,17 @@ export interface CohubConversationView {
   readonly turns: readonly CohubTurnView[]
 }
 
-/** Immediate acceptance returned after sending a Cohub conversation prompt. */
-export interface CohubConversationPromptResult {
+/** One ordinary DSH Session bound to a Cohub Space. */
+export interface CohubDshSessionBinding {
   readonly spaceId: string
-  readonly sessionId: string
-  readonly sessionTitle: string
-  readonly turnId: string
-  readonly turnStatus: string
+  readonly spaceTitle: string
+  readonly dshSessionId: string
+}
+
+/** Local DSH working directory selected before a Cohub-bound Session is created. */
+export interface CohubDshSessionStart {
+  readonly spaceId: string
+  readonly cwd: string
 }
 
 /** One immediate child returned by the Cohub filesystem API. */
@@ -88,7 +92,10 @@ export type CohubSpaceWriteResult =
 
 declare module '@deepseek-ai/cordis' {
   interface Events {
-    /** The account state changed; browser-side Space sources should refresh. */
+    /**
+     * The account state changed; browser-side Space sources should refresh.
+     * @mode emit
+     */
     'cohub-spaces/changed'(): void
   }
 }

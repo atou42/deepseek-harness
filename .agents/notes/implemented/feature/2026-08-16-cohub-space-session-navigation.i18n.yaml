@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-16-cohub-space-session-navigation.md
-2026-08-16-cohub-space-session-navigation.md: 298307c9b40e1e5e61fedaa919509c4529b2fc8c
-2026-08-16-cohub-space-session-navigation.zh.md: 84b79832dc8698c978bd8acef0741a7df0b8234c
+2026-08-16-cohub-space-session-navigation.md: 20ef4db3282a13fbb9094d19ea714c9dea1b8e5b
+2026-08-16-cohub-space-session-navigation.zh.md: 7fbc2f7d39e18bfa4cae1ce5bf423143e4ea76b0

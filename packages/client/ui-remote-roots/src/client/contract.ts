@@ -1,9 +1,10 @@
 import type { PropsLocale, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  RemoteConversationPromptResult, RemoteConversationView, RemoteDirectoryListing,
+  RemoteConversationView, RemoteDirectoryListing,
   RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 
+/** Services injected into the remote-root navigation tree. */
 export interface RemoteRootTreeInjected {
   readonly hooks: { readonly remoteRoots: import('@deepseek-ai/dsh-client-ui-slots').HostObservable<RemoteRootsSnapshot> }
   list(sourceId: RemoteRootSourceId, request: {
@@ -16,9 +17,10 @@ export interface RemoteRootTreeInjected {
     rootId: RemoteResourceId,
     sessionId?: RemoteResourceId,
     sessionTitle?: string,
-  ): void
+  ): Promise<void>
 }
 
+/** Render props for the remote-root navigation tree. */
 export type RemoteRootTreeProps = Omit<RemoteRootTreeInjected, 'hooks'> & {
   readonly useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
 } & PropsLocale<'remoteRoots'>
@@ -31,11 +33,6 @@ export interface RemoteConversationOverlayInjected {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
   }): Promise<RemoteConversationView>
-  promptConversation(sourceId: RemoteRootSourceId, request: {
-    readonly rootId: RemoteResourceId
-    readonly sessionId?: RemoteResourceId
-    readonly text: string
-  }): Promise<RemoteConversationPromptResult>
 }
 
 /** Render props for the selected remote conversation. */

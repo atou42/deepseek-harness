@@ -1,7 +1,14 @@
 /** Host-side Cohub Space/files adapter. */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import { isAbsolute } from 'node:path'
 import z from '@deepseek-ai/schemastery'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { defineTool } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import {
   DEFAULT_COHUB_API_BASE_URL,
   type CohubAccountService,
@@ -9,7 +16,8 @@ import {
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   CohubSpaceDirectory,
-  CohubConversationPromptResult,
+  CohubDshSessionBinding,
+  CohubDshSessionStart,
   CohubConversationView,
   CohubSpaceEntry,
   CohubSpaceSessionList,
@@ -22,8 +30,16 @@ import type {
 
 export type * from './types.ts'
 
+/** Runtime settings for the Cohub Space Host adapter. */
 export interface Config {
+  /** Cohub HTTP API origin. */
   apiBaseUrl?: string
+  /** Absolute local directory used to anchor Cohub-bound DSH Sessions. */
+  localCwd?: string
+  /** Delay between command-task status polls. */
+  runPollIntervalMs?: number
+  /** Maximum time to wait for one Cohub command task. */
+  runTimeoutMs?: number
 }
 
 interface JsonResponse {
@@ -34,6 +50,52 @@ interface JsonResponse {
 interface ExpectedRevision {
   readonly mtimeMs: number
   readonly size: number
+}
+
+interface SpaceBinding {
+  readonly spaceId: string
+  readonly spaceTitle: string
+}
+
+interface CohubRunResult {
+  readonly output: string
+  readonly durationMs: number
+  readonly truncated: boolean
+  readonly exitCode?: number
+  readonly termination?: string
+}
+
+const BINDING_PLUGIN = 'cohub-space'
+const BINDING_PREFIX = 'Cohub workspace binding: '
+
+function bindingText(binding: SpaceBinding): string {
+  return `${BINDING_PREFIX}${JSON.stringify(binding)}\nThis DSH Session can use its ordinary local tools and the bound Cohub Space tools together. Cohub paths are relative to the Space root.`
+}
+
+function parseBindingText(value: string): SpaceBinding | undefined {
+  const firstLine = value.split('\n', 1)[0]
+  if (!firstLine?.startsWith(BINDING_PREFIX)) return undefined
+  const parsed = record(JSON.parse(firstLine.slice(BINDING_PREFIX.length)), 'persisted Cohub binding')
+  return Object.freeze({
+    spaceId: nonBlank(parsed.spaceId, 'persisted Cohub binding spaceId'),
+    spaceTitle: nonBlank(parsed.spaceTitle, 'persisted Cohub binding spaceTitle'),
+  })
+}
+
+function waitForPoll(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(done, ms)
+    function done(): void {
+      signal.removeEventListener('abort', aborted)
+      resolve()
+    }
+    function aborted(): void {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }
+    signal.addEventListener('abort', aborted, { once: true })
+  })
 }
 
 /** A Cohub API request failed without exposing authorization material. */
@@ -93,6 +155,12 @@ function normalizeUrl(value: string): string {
     throw new TypeError('cohub-spaces: apiBaseUrl must use HTTP or HTTPS')
   }
   return parsed.toString().replace(/\/$/, '')
+}
+
+function absoluteCwd(value: unknown): string {
+  const cwd = nonBlank(value, 'localCwd')
+  if (!isAbsolute(cwd)) throw new TypeError('cohub-spaces: localCwd must be an absolute path')
+  return cwd
 }
 
 function spacePath(value: unknown, field: string, allowEmpty: boolean): string {
@@ -165,6 +233,11 @@ function optionalText(value: unknown, field: string): string | undefined {
   return value
 }
 
+function text(value: unknown, field: string): string {
+  if (typeof value !== 'string') throw new TypeError(`cohub-spaces: ${field} must be a string`)
+  return value
+}
+
 function isoInstant(value: unknown, field: string): string {
   const instant = nonBlank(value, field)
   if (!Number.isFinite(Date.parse(instant))) throw new TypeError(`cohub-spaces: ${field} must be an ISO-8601 instant`)
@@ -181,7 +254,7 @@ function parseSession(value: unknown, spaceId: string, field: string): CohubSess
   return Object.freeze({
     id,
     spaceId,
-    title: nonBlank(session.title, `session "${id}" title`),
+    title: text(session.title, `session "${id}" title`),
     status: nonBlank(session.status, `session "${id}" status`),
     ...latestMessageText === undefined ? {} : { latestMessageText },
     updatedAt: isoInstant(session.updatedAt, `session "${id}" updatedAt`),
@@ -238,22 +311,6 @@ function parseTurnPage(value: unknown, spaceId: string, sessionId: string): Turn
     })
   })
   return Object.freeze({ session, turns: Object.freeze(turns), hasMore: body.hasMore, ...nextCursor ? { nextCursor } : {} })
-}
-
-function parsePromptResult(value: unknown, spaceId: string): CohubConversationPromptResult {
-  const body = record(value, 'prompt response')
-  if (body.mode !== 'immediate') throw new TypeError('cohub-spaces: prompt response must be immediate')
-  const session = parseSession(body.session, spaceId, 'prompt response session')
-  const turn = record(body.turn, 'prompt response turn')
-  const turnId = nonBlank(turn.id, 'prompt response turn id')
-  if (turn.sessionId !== session.id) throw new TypeError('cohub-spaces: prompt response Turn does not belong to its Session')
-  return Object.freeze({
-    spaceId,
-    sessionId: session.id,
-    sessionTitle: session.title,
-    turnId,
-    turnStatus: nonBlank(turn.status, 'prompt response turn status'),
-  })
 }
 
 function parseEntry(value: unknown, requestedPath: string, index: number): CohubSpaceEntry {
@@ -340,75 +397,136 @@ function apiErrorMessage(value: unknown): string {
 
 /** Typed Remote service backed only by Cohub account tokens and platform HTTP. */
 export class CohubSpacesGateway extends TypertRemoteService {
-  static inject = ['cohubAccount']
+  static inject = ['cohubAccount', 'agents']
 
   static Config: z<Config> = z.object({
     apiBaseUrl: z.string().default(DEFAULT_COHUB_API_BASE_URL),
+    localCwd: z.string().default(process.cwd()),
+    runPollIntervalMs: z.number().step(1).min(100).max(10_000).default(1_000),
+    runTimeoutMs: z.number().step(1).min(1_000).max(3_600_000).default(120_000),
   })
 
   private readonly apiBaseUrl: string
+  private readonly localCwd: string
+  private readonly runPollIntervalMs: number
+  private readonly runTimeoutMs: number
   private readonly lifetime = new AbortController()
   private readonly active = new Set<Promise<unknown>>()
+  private readonly bindings = new Map<string, SpaceBinding & { readonly dispose: () => void }>()
   private closed = false
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'cohubSpaces')
     this.apiBaseUrl = normalizeUrl(config.apiBaseUrl ?? DEFAULT_COHUB_API_BASE_URL)
+    this.localCwd = absoluteCwd(config.localCwd ?? process.cwd())
+    this.runPollIntervalMs = config.runPollIntervalMs ?? 1_000
+    this.runTimeoutMs = config.runTimeoutMs ?? 120_000
   }
 
   *[Service.init](): Generator<() => Promise<void>, void, void> {
     const unsubscribe = this.ctx.cohubAccount.snapshot.subscribe(() => {
       if (!this.closed) this.ctx.emit('cohub-spaces/changed')
     })
+    const stopCreated = this.ctx.on('agent/created', ({ agent }) => {
+      const binding = this.bindingFromSession(agent)
+      if (binding !== undefined) this.installBinding(agent, binding, false)
+    })
+    const stopDisposed = this.ctx.on('agent/disposed', ({ agent }) => {
+      this.bindings.delete(agent.id)
+    })
     yield async () => {
       this.closed = true
       unsubscribe()
+      stopCreated()
+      stopDisposed()
+      for (const binding of this.bindings.values()) binding.dispose()
+      this.bindings.clear()
       this.lifetime.abort(new Error('cohub-spaces: service disposed'))
       await Promise.allSettled([...this.active])
     }
   }
 
-  /** List all Spaces accessible to the current account. */
+  /**
+   * List all Spaces accessible to the current account.
+   * @returns The authenticated account's Spaces.
+   */
   @Remote('listSpaces')
   listSpaces(): Promise<readonly CohubSpaceView[]> {
     return this.track(this.listSpacesImpl())
   }
 
-  /** List every conversation in one Space, following the platform cursor. */
+  /**
+   * List every conversation in one Space, following the platform cursor.
+   * @param spaceId Cohub Space identity.
+   * @returns The complete Session listing.
+   */
   @Remote('listSessions')
   listSessions(spaceId: string): Promise<CohubSpaceSessionList> {
     return this.track(this.listSessionsImpl(spaceId))
   }
 
-  /** Read all currently retained Turns for one Cohub Session. */
+  /**
+   * Read all currently retained Turns for one Cohub Session.
+   * @param spaceId Cohub Space identity.
+   * @param sessionId Cohub Session identity.
+   * @returns The complete retained conversation view.
+   */
   @Remote('getConversation')
   getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView> {
     return this.track(this.getConversationImpl(spaceId, sessionId))
   }
 
-  /** Send text to an existing Cohub Session, or create one on the first prompt. */
-  @Remote('promptConversation')
-  promptConversation(
-    spaceId: string,
-    sessionId: string | undefined,
-    text: string,
-  ): Promise<CohubConversationPromptResult> {
-    return this.track(this.promptConversationImpl(spaceId, sessionId, text))
+  /**
+   * Resolve the local DSH working directory used for a Cohub-bound Session.
+   * @param spaceId Cohub Space identity.
+   * @returns The verified Space identity and local cwd anchor.
+   */
+  @Remote('getDshSessionStart')
+  getDshSessionStart(spaceId: string): Promise<CohubDshSessionStart> {
+    return this.track(this.getDshSessionStartImpl(spaceId))
   }
 
-  /** List one exact Space-relative directory. */
+  /**
+   * Attach one Cohub Space to an existing blank DSH Session.
+   * @param spaceId Cohub Space identity.
+   * @param dshSessionId Blank DSH Session identity.
+   * @returns The installed binding.
+   */
+  @Remote('bindDshSession')
+  bindDshSession(spaceId: string, dshSessionId: string): Promise<CohubDshSessionBinding> {
+    return this.track(this.bindDshSessionImpl(spaceId, dshSessionId))
+  }
+
+  /**
+   * List one exact Space-relative directory.
+   * @param spaceId Cohub Space identity.
+   * @param path Space-relative directory path.
+   * @returns The exact directory listing.
+   */
   @Remote('listDirectory')
   listDirectory(spaceId: string, path: string): Promise<CohubSpaceDirectory> {
     return this.track(this.listDirectoryImpl(spaceId, path))
   }
 
-  /** Read one inline UTF-8 text file. */
+  /**
+   * Read one inline UTF-8 text file.
+   * @param spaceId Cohub Space identity.
+   * @param path Space-relative file path.
+   * @returns The file content and revision.
+   */
   @Remote('readText')
   readText(spaceId: string, path: string): Promise<CohubSpaceTextFile> {
     return this.track(this.readTextImpl(spaceId, path))
   }
 
-  /** Compare-and-set one UTF-8 text file. */
+  /**
+   * Compare-and-set one UTF-8 text file.
+   * @param spaceId Cohub Space identity.
+   * @param path Space-relative file path.
+   * @param content Replacement UTF-8 content.
+   * @param ifRevision Required current revision.
+   * @returns The new file or a version conflict.
+   */
   @Remote('writeText')
   writeText(spaceId: string, path: string, content: string, ifRevision: string): Promise<CohubSpaceWriteResult> {
     return this.track(this.writeTextImpl(spaceId, path, content, ifRevision))
@@ -489,41 +607,143 @@ export class CohubSpacesGateway extends TypertRemoteService {
     return Object.freeze({ spaceId, session, turns: Object.freeze(turns) })
   }
 
-  private async promptConversationImpl(
-    spaceIdValue: string,
-    sessionIdValue: string | undefined,
-    textValue: string,
-  ): Promise<CohubConversationPromptResult> {
+  private async bindDshSessionImpl(spaceIdValue: string, dshSessionIdValue: string): Promise<CohubDshSessionBinding> {
     const spaceId = nonBlank(spaceIdValue, 'spaceId')
-    const sessionId = sessionIdValue === undefined ? undefined : nonBlank(sessionIdValue, 'sessionId')
-    const text = nonBlank(textValue, 'text')
-    const { data } = await this.request(`/api/spaces/${encodeURIComponent(spaceId)}/prompt`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...sessionId === undefined ? {} : { sessionId },
-        content: [{ type: 'text', text }],
-        accessMode: 'full_access',
-      }),
-    })
-    return parsePromptResult(data, spaceId)
+    const dshSessionId = nonBlank(dshSessionIdValue, 'dshSessionId')
+    const agent = this.ctx.agents.get(SessionId(dshSessionId))
+    if (agent === undefined) throw new Error(`cohub-spaces: DSH Session "${dshSessionId}" is not live`)
+    const existing = this.bindings.get(dshSessionId)
+    if (existing !== undefined) {
+      if (existing.spaceId !== spaceId) {
+        throw new Error(`cohub-spaces: DSH Session "${dshSessionId}" is already bound to Space "${existing.spaceId}"`)
+      }
+      return Object.freeze({ spaceId, spaceTitle: existing.spaceTitle, dshSessionId })
+    }
+    if (agent.session.events.some(event => event.type === 'user/message' && event.data.source.kind === 'user')) {
+      throw new Error(`cohub-spaces: DSH Session "${dshSessionId}" already contains a user turn`)
+    }
+    const space = (await this.listSpacesImpl()).find(item => item.id === spaceId)
+    if (space === undefined) throw new Error(`cohub-spaces: Space "${spaceId}" is not accessible to the current account`)
+    this.installBinding(agent, { spaceId, spaceTitle: space.title }, true)
+    return Object.freeze({ spaceId, spaceTitle: space.title, dshSessionId })
   }
 
-  private async listDirectoryImpl(spaceIdValue: string, pathValue: string): Promise<CohubSpaceDirectory> {
+  private async getDshSessionStartImpl(spaceIdValue: string): Promise<CohubDshSessionStart> {
+    const spaceId = nonBlank(spaceIdValue, 'spaceId')
+    const accessible = (await this.listSpacesImpl()).some(item => item.id === spaceId)
+    if (!accessible) throw new Error(`cohub-spaces: Space "${spaceId}" is not accessible to the current account`)
+    return Object.freeze({ spaceId, cwd: this.localCwd })
+  }
+
+  private bindingFromSession(agent: Agent): SpaceBinding | undefined {
+    for (let index = agent.session.events.length - 1; index >= 0; index--) {
+      const event = agent.session.events[index]
+      if (event?.type !== 'user/message'
+        || event.data.source.kind !== 'plugin'
+        || event.data.source.plugin !== BINDING_PLUGIN) continue
+      const block = event.data.content[0]
+      if (block?.type !== 'text') throw new TypeError('cohub-spaces: persisted binding message must start with text')
+      return parseBindingText(block.text)
+    }
+    return undefined
+  }
+
+  private installBinding(agent: Agent, binding: SpaceBinding, injectContext: boolean): void {
+    const current = this.bindings.get(agent.id)
+    if (current !== undefined) {
+      if (current.spaceId !== binding.spaceId) {
+        throw new Error(`cohub-spaces: DSH Session "${agent.id}" has conflicting Space bindings`)
+      }
+      return
+    }
+    const disposers: (() => void)[] = []
+    let disposed = false
+    const dispose = (): void => {
+      if (disposed) return
+      disposed = true
+      for (const unregister of disposers.reverse()) unregister()
+    }
+    try {
+      disposers.push(agent.ctx.systemPrompt.section({
+        name: 'cohub-space-workspace',
+        order: 50,
+        text: `This DSH Session is attached to Cohub Space ${JSON.stringify(binding.spaceTitle)} (${binding.spaceId}). Keep using ordinary local DSH tools for local work. Use the cohub_space_* tools for cloud files and commands; their paths are relative to the Space root.`,
+      }))
+      disposers.push(...this.registerBindingTools(agent, binding.spaceId))
+      this.bindings.set(agent.id, Object.freeze({ ...binding, dispose }))
+      if (injectContext) {
+        agent.inject(createUserMessage({
+          content: [{ type: 'text', text: bindingText(binding) }],
+          source: { kind: 'plugin', plugin: BINDING_PLUGIN, form: 'instructions' },
+        }))
+      }
+    } catch (error) {
+      this.bindings.delete(agent.id)
+      dispose()
+      throw error
+    }
+  }
+
+  private registerBindingTools(agent: Agent, spaceId: string): (() => void)[] {
+    const render = (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }]
+    const json = (value: unknown): JsonValue => structuredClone(value) as JsonValue
+    return [
+      agent.ctx.tools.register(defineTool({
+        name: 'cohub_space_list',
+        description: 'List one directory in the Cohub Space attached to this DSH Session. Paths are Space-relative POSIX paths.',
+        parameters: {
+          path: { type: 'string', description: 'Directory path relative to the Space root. Omit for the root.' },
+        },
+        output: { schema: { type: 'json' }, render },
+        execute: async (args, exec) => json(await this.listDirectoryImpl(spaceId, args.path ?? '', exec.signal)),
+      })),
+      agent.ctx.tools.register(defineTool({
+        name: 'cohub_space_read',
+        description: 'Read one UTF-8 text file from the Cohub Space attached to this DSH Session.',
+        parameters: {
+          path: { type: 'string', required: true, description: 'File path relative to the Space root.' },
+        },
+        output: { schema: { type: 'json' }, render },
+        execute: async (args, exec) => json(await this.readTextImpl(spaceId, args.path, exec.signal)),
+      })),
+      agent.ctx.tools.register(defineTool({
+        name: 'cohub_space_write',
+        description: 'Compare-and-set one UTF-8 text file in the attached Cohub Space. Read first and pass its revision.',
+        parameters: {
+          path: { type: 'string', required: true, description: 'File path relative to the Space root.' },
+          content: { type: 'string', required: true, description: 'Complete replacement content.' },
+          if_revision: { type: 'string', required: true, description: 'Revision returned by cohub_space_read.' },
+        },
+        output: { schema: { type: 'json' }, render },
+        execute: async (args, exec) => json(await this.writeTextImpl(spaceId, args.path, args.content, args.if_revision, exec.signal)),
+      })),
+      agent.ctx.tools.register(defineTool({
+        name: 'cohub_space_run',
+        description: 'Run a shell command inside the Cohub Space attached to this DSH Session and wait for its completed output.',
+        parameters: {
+          command: { type: 'string', required: true, description: 'Non-empty shell command to run in the Cohub Space.' },
+        },
+        output: { schema: { type: 'json' }, render },
+        execute: async (args, exec) => json(await this.runCommandImpl(spaceId, args.command, exec.signal)),
+      })),
+    ]
+  }
+
+  private async listDirectoryImpl(spaceIdValue: string, pathValue: string, signal?: AbortSignal): Promise<CohubSpaceDirectory> {
     const spaceId = nonBlank(spaceIdValue, 'spaceId')
     const path = spacePath(pathValue, 'path', true)
     const params = new URLSearchParams()
     if (path.length > 0) params.set('path', path)
     const query = params.toString()
-    const { data } = await this.request(`/api/spaces/${encodeURIComponent(spaceId)}/fs/tree${query ? `?${query}` : ''}`)
+    const { data } = await this.request(`/api/spaces/${encodeURIComponent(spaceId)}/fs/tree${query ? `?${query}` : ''}`, {}, signal)
     return parseDirectory(data, spaceId, path)
   }
 
-  private async readTextImpl(spaceIdValue: string, pathValue: string): Promise<CohubSpaceTextFile> {
+  private async readTextImpl(spaceIdValue: string, pathValue: string, signal?: AbortSignal): Promise<CohubSpaceTextFile> {
     const spaceId = nonBlank(spaceIdValue, 'spaceId')
     const path = spacePath(pathValue, 'path', false)
     const token = await this.ctx.cohubAccount.getAccessToken()
-    return this.readTextWithToken(spaceId, path, token)
+    return this.readTextWithToken(spaceId, path, token, signal)
   }
 
   private async writeTextImpl(
@@ -531,6 +751,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
     pathValue: string,
     content: string,
     ifRevision: string,
+    signal?: AbortSignal,
   ): Promise<CohubSpaceWriteResult> {
     const spaceId = nonBlank(spaceIdValue, 'spaceId')
     const path = spacePath(pathValue, 'path', false)
@@ -541,13 +762,13 @@ export class CohubSpacesGateway extends TypertRemoteService {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, content, encoding: 'utf-8', expected }),
-    }, true)
+    }, true, signal)
     if (result.response.status === 409 || result.response.status === 412) {
       return Object.freeze({
         ok: false,
         error: Object.freeze({
           code: 'version-conflict',
-          current: await this.readTextWithToken(spaceId, path, token),
+          current: await this.readTextWithToken(spaceId, path, token, signal),
         }),
       })
     }
@@ -562,18 +783,68 @@ export class CohubSpacesGateway extends TypertRemoteService {
     })
   }
 
-  private async readTextWithToken(spaceId: string, path: string, token: string): Promise<CohubSpaceTextFile> {
+  private async runCommandImpl(spaceIdValue: string, commandValue: string, signal: AbortSignal): Promise<CohubRunResult> {
+    const spaceId = nonBlank(spaceIdValue, 'spaceId')
+    const command = nonBlank(commandValue, 'command')
+    const token = await this.ctx.cohubAccount.getAccessToken()
+    const created = await this.requestWithToken(`/api/spaces/${encodeURIComponent(spaceId)}/commands`, token, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command }),
+    }, false, signal)
+    const taskRunId = nonBlank(record(created.data, 'command response').taskRunId, 'command response taskRunId')
+    const deadline = Date.now() + this.runTimeoutMs
+    while (true) {
+      if (Date.now() >= deadline) throw new Error(`cohub-spaces: command timed out after ${String(this.runTimeoutMs)}ms`)
+      const detail = await this.requestWithToken(`/api/tasks/${encodeURIComponent(taskRunId)}`, token, {}, false, signal)
+      const body = record(detail.data, 'task response')
+      const run = record(body.run, 'task response run')
+      const status = nonBlank(run.status, 'task response run status')
+      if (status === 'failed') {
+        throw new Error(`cohub-spaces: command failed: ${nonBlank(run.errorMessage, 'task response run errorMessage')}`)
+      }
+      if (status === 'completed') return this.parseRunResult(run.result)
+      await waitForPoll(Math.min(this.runPollIntervalMs, Math.max(1, deadline - Date.now())), signal)
+    }
+  }
+
+  private parseRunResult(value: unknown): CohubRunResult {
+    const result = record(value, 'task response run result')
+    if (typeof result.output !== 'string') throw new TypeError('cohub-spaces: task output must be a string')
+    if (typeof result.truncated !== 'boolean') throw new TypeError('cohub-spaces: task truncated must be a boolean')
+    const durationMs = nonNegativeNumber(result.durationMs, 'task durationMs')
+    const exitCode = result.exitCode === null || result.exitCode === undefined
+      ? undefined
+      : safeInteger(result.exitCode, 'task exitCode')
+    let termination: string | undefined
+    if (result.termination !== null && result.termination !== undefined) {
+      const detail = record(result.termination, 'task termination')
+      termination = nonBlank(detail.reason, 'task termination reason')
+    }
+    return Object.freeze({
+      output: result.output,
+      durationMs,
+      truncated: result.truncated,
+      ...exitCode === undefined ? {} : { exitCode },
+      ...termination === undefined ? {} : { termination },
+    })
+  }
+
+  private async readTextWithToken(spaceId: string, path: string, token: string, signal?: AbortSignal): Promise<CohubSpaceTextFile> {
     const params = new URLSearchParams({ path })
     const { data } = await this.requestWithToken(
       `/api/spaces/${encodeURIComponent(spaceId)}/fs/file?${params.toString()}`,
       token,
+      {},
+      false,
+      signal,
     )
     return parseTextFile(data, spaceId, path)
   }
 
-  private async request(path: string, init: RequestInit = {}): Promise<JsonResponse> {
+  private async request(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<JsonResponse> {
     const token = await this.ctx.cohubAccount.getAccessToken()
-    return this.requestWithToken(path, token, init)
+    return this.requestWithToken(path, token, init, false, signal)
   }
 
   private async requestWithToken(
@@ -581,6 +852,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
     token: string,
     init: RequestInit = {},
     allowConflict = false,
+    signal?: AbortSignal,
   ): Promise<JsonResponse> {
     this.assertOpen()
     const headers = new Headers(init.headers)
@@ -588,7 +860,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
     const response = await fetch(`${this.apiBaseUrl}${path}`, {
       ...init,
       headers,
-      signal: this.lifetime.signal,
+      signal: signal === undefined ? this.lifetime.signal : AbortSignal.any([this.lifetime.signal, signal]),
     })
     const result = { response, data: await responseData(response) }
     if (!allowConflict || (response.status !== 409 && response.status !== 412)) this.assertSuccessful(result)

@@ -2,12 +2,12 @@
 
 import type { ClientContext, ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  CohubAccountSnapshot, CohubConversationPromptResult, CohubConversationView,
+  CohubAccountSnapshot, CohubConversationView,
   CohubSpaceSessionList,
   CohubSpaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
-  RemoteConversationPromptResult, RemoteConversationView, RemoteDirectoryListing,
+  RemoteConversationView, RemoteDirectoryListing,
   RemoteResourceId,
   RemoteRootSource,
   RemoteRootSourceId,
@@ -16,14 +16,15 @@ import type {
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-remote-roots/client'
 
+/** Stable provider identity used by the remote-root registry. */
 export const COHUB_SPACES_SOURCE_ID = 'cohub.spaces' as RemoteRootSourceId
 
+/** Token-free browser facade for Cohub account, Space, and Session reads. */
 export interface CohubSpacesRemoteApi {
   getAccount(): Promise<CohubAccountSnapshot>
   listSpaces(): Promise<readonly CohubSpaceView[]>
   listSessions(spaceId: string): Promise<CohubSpaceSessionList>
   getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView>
-  promptConversation(spaceId: string, sessionId: string | undefined, text: string): Promise<CohubConversationPromptResult>
 }
 
 type RemoteAnswer<T> =
@@ -67,6 +68,12 @@ function turnResourceId(spaceId: string, sessionId: string, turnId: string): Rem
   return JSON.stringify([spaceId, sessionId, turnId]) as RemoteResourceId
 }
 
+function sessionDisplayName(session: { readonly id: string; readonly title: string; readonly latestMessageText?: string }): string {
+  if (session.title.trim().length > 0) return session.title
+  if (session.latestMessageText?.trim().length) return session.latestMessageText.trim().slice(0, 80)
+  return `Session ${session.id.slice(0, 8)}`
+}
+
 function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (signal === undefined) return promise
   if (signal.aborted) return Promise.reject(rejection(signal.reason, 'client-cohub-spaces: operation aborted'))
@@ -102,8 +109,12 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     },
   }
 
-  constructor(private readonly remote: CohubSpacesRemoteApi) {}
+  constructor(
+    private readonly remote: CohubSpacesRemoteApi,
+    private readonly startDshSession: (spaceId: string) => Promise<void>,
+  ) {}
 
+  /** Reload account state and the accessible Space roots. */
   async refresh(): Promise<void> {
     if (this.closed) return
     const generation = ++this.generation
@@ -133,7 +144,9 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
           id: space.id as RemoteResourceId,
           title: space.title,
           marker: Object.freeze({ kind: 'cloud' as const, label: 'Cohub' }),
-          capabilities: Object.freeze({ browse: true as const, read: false, write: false, conversation: true }),
+          capabilities: Object.freeze({
+            browse: true as const, read: false, write: false, workspace: true, conversation: true,
+          }),
         })
       })
       this.publish(Object.freeze({ status: 'ready', roots: Object.freeze(roots) }))
@@ -157,7 +170,7 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
       entries: Object.freeze(value.sessions.map(session => Object.freeze({
         id: resourceId(value.spaceId, session.id),
         parentId: request.parentId,
-        name: session.title,
+        name: sessionDisplayName(session),
         kind: 'session' as const,
         revision: session.updatedAt,
       }))),
@@ -179,7 +192,11 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     }
     return Object.freeze({
       rootId: request.rootId,
-      session: Object.freeze({ id: request.sessionId, title: value.session.title, status: value.session.status }),
+      session: Object.freeze({
+        id: request.sessionId,
+        title: sessionDisplayName(value.session),
+        status: value.session.status,
+      }),
       turns: Object.freeze(value.turns.map(turn => Object.freeze({
         id: turnResourceId(value.spaceId, rawSessionId, turn.id),
         sequence: turn.sequence,
@@ -192,27 +209,14 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     })
   }
 
-  async promptConversation(request: {
+  async startWorkspace(request: {
     readonly rootId: RemoteResourceId
-    readonly sessionId?: RemoteResourceId
-    readonly text: string
     readonly signal?: AbortSignal
-  }): Promise<RemoteConversationPromptResult> {
-    const rawSessionId = request.sessionId === undefined ? undefined : sessionId(request.rootId, request.sessionId)
-    const value = await abortable(
-      this.remote.promptConversation(request.rootId, rawSessionId, request.text),
-      request.signal,
-    )
-    if (value.spaceId !== request.rootId) throw new TypeError('client-cohub-spaces: prompt result does not match the requested Space')
-    return Object.freeze({
-      rootId: request.rootId,
-      sessionId: resourceId(value.spaceId, value.sessionId),
-      sessionTitle: value.sessionTitle,
-      turnId: turnResourceId(value.spaceId, value.sessionId, value.turnId),
-      turnStatus: value.turnStatus,
-    })
+  }): Promise<void> {
+    await abortable(this.startDshSession(request.rootId), request.signal)
   }
 
+  /** Stop publishing snapshots and release local listeners. */
   dispose(): void {
     if (this.closed) return
     this.closed = true
@@ -232,7 +236,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-export const inject = ['remote', 'remote.cohubAccount', 'remote.cohubSpaces', 'remoteRoots']
+export const inject = ['remote', 'remote.cohubAccount', 'remote.cohubSpaces', 'remoteRoots', 'sessions', 'workspaces']
 
 /** Register the Cohub source and refresh it whenever the Host account changes. */
 export function apply(ctx: ClientContext): () => void {
@@ -245,8 +249,19 @@ export function apply(ctx: ClientContext): () => void {
       unwrapRemote('cohubSpaces.listSessions', await carrier.listSessions(spaceId)),
     getConversation: async (spaceId, sessionId) =>
       unwrapRemote('cohubSpaces.getConversation', await carrier.getConversation(spaceId, sessionId)),
-    promptConversation: async (spaceId, sessionId, text) =>
-      unwrapRemote('cohubSpaces.promptConversation', await carrier.promptConversation(spaceId, sessionId, text)),
+  }, async (spaceId) => {
+    const startCarrier = carrier as typeof carrier & {
+      getDshSessionStart(spaceId: string): Promise<RemoteAnswer<{ spaceId: string; cwd: string }>>
+      bindDshSession(spaceId: string, sessionId: string): Promise<RemoteAnswer<unknown>>
+    }
+    const start = unwrapRemote('cohubSpaces.getDshSessionStart', await startCarrier.getDshSessionStart(spaceId))
+    if (start.spaceId !== spaceId || typeof start.cwd !== 'string' || start.cwd.trim().length === 0) {
+      throw new TypeError('client-cohub-spaces: DSH Session start context does not match the requested Space')
+    }
+    const workspace = await ctx.workspaces.create({ path: start.cwd })
+    const sessionId = await ctx.sessions.create({ workspaceId: workspace.workspaceId })
+    unwrapRemote('cohubSpaces.bindDshSession', await startCarrier.bindDshSession(spaceId, sessionId))
+    ctx.sessions.open(sessionId)
   })
   const unregister = ctx.remoteRoots.register(source)
   let off: (() => void) | undefined

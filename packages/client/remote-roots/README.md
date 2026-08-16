@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Generic browser-side capability seam for remote roots. A provider registers an observable list of explicitly marked roots plus opaque-ID browse/read/write and optional conversation callbacks. The contract contains no local path and never creates a local Workspace, changes a Session cwd, or supplies Shell execution. The registry owns the selected remote conversation target, routes history and prompts to the provider, rejects malformed publications and results, and withdraws state and subscriptions when the provider unloads. An expected missing login is a provider-labelled authentication-required state rather than an error; transport failures, mismatched identities, duplicate entries, invalid metadata, and unsupported outcomes still fail explicitly.
+Generic browser-side capability seam for remote roots. A provider registers an observable list of explicitly marked roots plus opaque-ID browse/read/write, optional DSH-session startup, and optional read-only conversation history. The contract contains no local path and never adopts a root as a local Workspace or changes a Session cwd. Root activation awaits the provider's DSH startup callback before publishing selection; Session leaves open only provider history. The registry rejects malformed publications and results, and withdraws state and subscriptions when the provider unloads. An expected missing login is a provider-labelled authentication-required state rather than an error; transport failures, mismatched identities, duplicate entries, invalid metadata, and unsupported outcomes still fail explicitly.
 
 ## Model Experience
 

@@ -7,7 +7,12 @@
   "include": ["src"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../core/agent" },
+    { "path": "../../core/session" },
+    { "path": "../../core/system-prompt" },
+    { "path": "../../core/tools" },
     { "path": "../../identity/cohub-account" },
+    { "path": "../../llm/llm" },
     { "path": "../../runtime-diagnostics/invariants" },
     { "path": "../../typert/protocol" }
   ]

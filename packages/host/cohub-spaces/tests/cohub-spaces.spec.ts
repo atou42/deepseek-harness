@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import CohubSpacesGateway, {
   CohubSpaceFilePreparingError,
@@ -32,6 +34,18 @@ class TestAccount extends Service {
   }
 }
 
+class TestAgents extends Service {
+  agent: Agent | undefined
+
+  constructor(ctx: Context) {
+    super(ctx, 'agents')
+  }
+
+  get(id: ReturnType<typeof SessionId>): Agent | undefined {
+    return this.agent?.id === id ? this.agent : undefined
+  }
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -43,12 +57,14 @@ async function boot() {
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(TestAccount)
+  await ctx.plugin(TestAgents)
   const fiber = ctx.plugin(CohubSpacesGateway, { apiBaseUrl: 'https://cohub.example.test/' })
   await fiber.await()
   return {
     ctx,
     fiber,
     account: ctx.get('cohubAccount') as unknown as TestAccount,
+    agents: ctx.get('agents') as unknown as TestAgents,
     spaces: ctx.cohubSpaces,
   }
 }
@@ -66,11 +82,21 @@ describe('CohubSpacesGateway', () => {
       { method: 'listSpaces', invocation: { kind: 'direct' } },
       { method: 'listSessions', invocation: { kind: 'direct' } },
       { method: 'getConversation', invocation: { kind: 'direct' } },
-      { method: 'promptConversation', invocation: { kind: 'direct' } },
+      { method: 'getDshSessionStart', invocation: { kind: 'direct' } },
+      { method: 'bindDshSession', invocation: { kind: 'direct' } },
       { method: 'listDirectory', invocation: { kind: 'direct' } },
       { method: 'readText', invocation: { kind: 'direct' } },
       { method: 'writeText', invocation: { kind: 'direct' } },
     ])
+  })
+
+  it('resolves a Cohub Space to the configured local DSH working directory', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json([{ id: 'space-1', title: 'deepseek harness' }])))
+    const { spaces } = await boot()
+
+    await expect(spaces.getDshSessionStart('space-1')).resolves.toEqual({
+      spaceId: 'space-1', cwd: process.cwd(),
+    })
   })
 
   it('lists every Session page for one Space without exposing files', async () => {
@@ -111,7 +137,71 @@ describe('CohubSpacesGateway', () => {
     ])
   })
 
-  it('loads a Cohub conversation and sends the first prompt into a new Cohub Session', async () => {
+  it('preserves an untitled Cohub Session instead of rejecting the whole Space', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({
+      sessions: [{
+        id: '18c0d6a5-0079-47e4-8808-9c384b5d3b4b', spaceId: 'space-1', title: '', status: 'active',
+        latestMessageText: 'latest answer', updatedAt: '2026-08-17T10:00:00.000Z',
+      }],
+      pageInfo: { hasMore: false, nextCursor: null },
+    })))
+    const { spaces } = await boot()
+
+    await expect(spaces.listSessions('space-1')).resolves.toMatchObject({
+      sessions: [{ id: '18c0d6a5-0079-47e4-8808-9c384b5d3b4b', title: '' }],
+    })
+  })
+
+  it('binds Cohub tools and context onto the existing DSH Agent without calling Cohub Agent', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json([{ id: 'space-1', title: 'deepseek harness' }]))
+      .mockResolvedValueOnce(json({
+        path: '',
+        entries: [{ name: 'README.md', path: 'README.md', type: 'file', size: 12, mtimeMs: 10 }],
+      }))
+      .mockResolvedValueOnce(json({ taskRunId: 'task-1' }))
+      .mockResolvedValueOnce(json({ run: { status: 'completed', result: {
+        output: 'cloud-ok\n', durationMs: 25, truncated: false, exitCode: 0,
+        termination: { reason: 'exited', exitCode: 0 },
+      } } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces, agents } = await boot()
+    const tools: { name: string; execute(args: unknown, exec: { signal: AbortSignal }): Promise<unknown> }[] = []
+    const sections: unknown[] = []
+    const inject = vi.fn()
+    agents.agent = {
+      id: SessionId('dsh-session-1'),
+      session: { events: [] },
+      ctx: {
+        systemPrompt: { section: vi.fn((section: unknown) => { sections.push(section); return vi.fn() }) },
+        tools: { register: vi.fn((tool: typeof tools[number]) => { tools.push(tool); return vi.fn() }) },
+      },
+      inject,
+    } as unknown as Agent
+
+    await expect(spaces.bindDshSession('space-1', 'dsh-session-1')).resolves.toEqual({
+      spaceId: 'space-1', spaceTitle: 'deepseek harness', dshSessionId: 'dsh-session-1',
+    })
+    expect(sections).toHaveLength(1)
+    expect(tools.map(tool => tool.name)).toEqual([
+      'cohub_space_list', 'cohub_space_read', 'cohub_space_write', 'cohub_space_run',
+    ])
+    expect(inject).toHaveBeenCalledOnce()
+    const listed = await tools[0]!.execute({}, { signal: new AbortController().signal })
+    expect(listed).toMatchObject({ entries: [{ path: 'README.md' }] })
+    await expect(tools[3]!.execute({ command: 'pwd' }, { signal: new AbortController().signal })).resolves.toEqual({
+      output: 'cloud-ok\n', durationMs: 25, truncated: false, exitCode: 0, termination: 'exited',
+    })
+    expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://cohub.example.test/api/spaces',
+      'https://cohub.example.test/api/spaces/space-1/fs/tree',
+      'https://cohub.example.test/api/spaces/space-1/commands',
+      'https://cohub.example.test/api/tasks/task-1',
+    ])
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/prompt'))).toBe(false)
+  })
+
+  it('loads a Cohub conversation without exposing a provider prompt route', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({
         session: { id: 'session-1', spaceId: 'space-1', title: 'Remote chat', status: 'active', updatedAt: '2026-08-16T10:00:01.000Z' },
@@ -123,16 +213,10 @@ describe('CohubSpacesGateway', () => {
         hasMore: false,
         nextCursor: null,
       }))
-      .mockResolvedValueOnce(json({
-        mode: 'immediate',
-        session: { id: 'session-2', spaceId: 'space-1', title: 'New remote chat', status: 'active', updatedAt: '2026-08-16T10:01:00.000Z' },
-        turn: { id: 'turn-2', sessionId: 'session-2', sequence: 1, status: 'running' },
-      }))
     vi.stubGlobal('fetch', fetchMock)
     const { spaces } = await boot()
     const conversation = spaces as unknown as {
       getConversation(spaceId: string, sessionId: string): Promise<unknown>
-      promptConversation(spaceId: string, sessionId: string | undefined, text: string): Promise<unknown>
     }
 
     await expect(conversation.getConversation('space-1', 'session-1')).resolves.toEqual({
@@ -144,18 +228,9 @@ describe('CohubSpacesGateway', () => {
         createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
       }],
     })
-    await expect(conversation.promptConversation('space-1', undefined, 'start here')).resolves.toEqual({
-      spaceId: 'space-1', sessionId: 'session-2', sessionTitle: 'New remote chat',
-      turnId: 'turn-2', turnStatus: 'running',
-    })
     expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
       'https://cohub.example.test/api/sessions/session-1/turns?direction=older&limit=100',
-      'https://cohub.example.test/api/spaces/space-1/prompt',
     ])
-    expect(JSON.parse((fetchMock.mock.calls[1]?.[1] as RequestInit).body as string)).toEqual({
-      content: [{ type: 'text', text: 'start here' }],
-      accessMode: 'full_access',
-    })
   })
 
   it('lists accessible Spaces and preserves file, folder, and symlink kinds', async () => {

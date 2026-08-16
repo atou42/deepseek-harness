@@ -27,6 +27,7 @@ function LeafRow({ entry, sourceId, rootId, depth, activate, t }: {
   activate: RemoteRootTreeProps['activate']
   t: Translate
 }) {
+  const [activationError, setActivationError] = useState<string>()
   const content = <>
     <span className={css.chevronSpacer} />
     {entry.kind === 'session'
@@ -34,7 +35,7 @@ function LeafRow({ entry, sourceId, rootId, depth, activate, t }: {
       : <span className={css.fileIcon} aria-hidden="true" />}
     <span className={css.name}>{entry.name}</span>
   </>
-  if (entry.kind === 'session') return (
+  if (entry.kind === 'session') return <>
     <button
       type="button"
       className={css.row}
@@ -42,11 +43,17 @@ function LeafRow({ entry, sourceId, rootId, depth, activate, t }: {
       aria-label={t('session', { name: entry.name })}
       style={{ paddingInlineStart: `${8 + depth * 16}px` }}
       data-remote-resource-id={entry.id}
-      onClick={() => { activate(sourceId, rootId, entry.id, entry.name) }}
+      onClick={() => {
+        setActivationError(undefined)
+        void activate(sourceId, rootId, entry.id, entry.name).catch((error: unknown) => {
+          setActivationError(errorMessage(error))
+        })
+      }}
     >
       {content}
     </button>
-  )
+    {activationError !== undefined && <p className={css.error} role="alert">{activationError}</p>}
+  </>
   return (
     <div
       className={css.row}

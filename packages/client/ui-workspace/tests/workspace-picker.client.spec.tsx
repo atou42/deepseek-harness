@@ -89,7 +89,7 @@ function mount(
 ) {
   const onPick = vi.fn()
   const onClose = vi.fn()
-  const activateRemote = vi.fn()
+  const activateRemote = vi.fn(async () => {})
   const anchorRef = anchor()
   const { probe, renderSlot } = flowProbe()
   const renderPicker = (nextItems: readonly WorkspaceView[]) => (
@@ -122,7 +122,7 @@ function chooseAdd(): void {
 }
 
 describe('WorkspacePicker', () => {
-  it('lists conversational Cohub Spaces and opens the remote workbench without creating a local Workspace', () => {
+  it('lists Cohub Spaces and starts their DSH workbench without creating a local Workspace', async () => {
     const sourceId = 'cohub' as RemoteRootSourceId
     const rootId = 'space-1' as RemoteResourceId
     const remoteRoots: RemoteRootsSnapshot = {
@@ -134,14 +134,14 @@ describe('WorkspacePicker', () => {
           id: rootId,
           title: 'deepseek harness',
           marker: { kind: 'cloud', label: 'Cohub' },
-          capabilities: { browse: true, read: false, write: false, conversation: true },
+          capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
         }],
       }],
     }
     const b = mount([], vi.fn(), occupancySource(), remoteRoots)
     fireEvent.click(screen.getByRole('menuitem', { name: 'deepseek harness · Cohub' }))
     expect(b.activateRemote).toHaveBeenCalledWith(sourceId, rootId)
-    expect(b.onClose).toHaveBeenCalled()
+    await waitFor(() => { expect(b.onClose).toHaveBeenCalled() })
     expect(b.onPick).not.toHaveBeenCalled()
     expect(b.createWorkspace).not.toHaveBeenCalled()
   })

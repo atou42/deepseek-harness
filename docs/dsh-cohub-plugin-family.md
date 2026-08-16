@@ -33,11 +33,11 @@ Load the generic remote-root registry and UI. Provider packages may contribute c
 
 Load Cohub Account on the Host and optionally its browser UI. This enables device login and logout, but no Space, model, generation, or Board capability by itself.
 
-### Cohub Spaces with cloud Sessions
+### Cohub Spaces in DSH Sessions
 
-Load Cohub Account, Cohub Spaces, the generic remote-root registry and UI, and the Cohub Spaces browser provider. Each accessible Space appears as a root marked `Cohub`; expanding it lists that Space's Sessions rather than its files.
+Load Cohub Account, Cohub Spaces, the generic remote-root registry and UI, and the Cohub Spaces browser provider. Each accessible Space appears as a root marked `Cohub`; expanding it lists that Space's Sessions rather than its files. Selecting the Space creates an ordinary DSH Session, binds the Space to that Agent, and opens the normal DSH workbench. The Agent keeps its local tools and receives scoped Cohub file and command tools.
 
-A Space root never enters DSH local Workspaces. Expanding it does not change a Session working directory, create a local path, change Shell behavior, or start a Cohub Session. Opaque Space and Session identities cross the remote-root seam. Opening Session history is the next conversation-adapter layer, not file browsing.
+A Space root never masquerades as a DSH local Workspace. Selecting it pairs the remote root with the configured ordinary local Workspace, then starts a DSH Session whose local tools use that cwd and whose Cohub tools use opaque Space identities. Expanding it only lists Cohub Sessions. It never routes prompts into Cohub Agent, and existing Cohub Sessions open only as read-only history.
 
 ### Model, generation, and Board
 
@@ -53,6 +53,6 @@ Each package unregisters only what it owns. Lifecycle fences prevent late asynch
 
 ## Deliberate non-goals
 
-This family does not embed the Cohub CLI or SDK, take over DSH execution, expose remote Shell, silently synchronize Space files, publish Works, convert Spaces into local Workspaces, or introduce an all-in-one convenience bundle.
+This family does not embed the Cohub CLI or SDK, replace the DSH Agent, replace its local Shell, silently synchronize Space files, publish Works, convert Spaces into local Workspaces, or introduce an all-in-one convenience bundle. The Space binding adds bounded one-shot Cohub commands as Agent-scoped tools.
 
 Composition stays explicit in a profile patch or deployment layer. This preserves user choice and prevents an all-or-nothing stack.

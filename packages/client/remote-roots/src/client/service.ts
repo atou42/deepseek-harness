@@ -1,7 +1,7 @@
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  RemoteConversationPromptResult, RemoteConversationTarget, RemoteConversationView,
+  RemoteConversationTarget, RemoteConversationView,
   RemoteDirectoryListing, RemoteResourceId, RemoteRootSource, RemoteRootSourceId,
   RemoteRootSourceSnapshot, RemoteRootsSnapshot, RemoteTextFile, RemoteTextWriteResult,
 } from '../types.ts'
@@ -48,6 +48,9 @@ function cloneRoot(sourceId: string, value: unknown): RemoteRootsSnapshot['sourc
   if (capabilities.conversation !== undefined && typeof capabilities.conversation !== 'boolean') {
     throw new TypeError(`remote-roots: source "${sourceId}" capability conversation must be a boolean`)
   }
+  if (capabilities.workspace !== undefined && typeof capabilities.workspace !== 'boolean') {
+    throw new TypeError(`remote-roots: source "${sourceId}" capability workspace must be a boolean`)
+  }
   return Object.freeze({
     id: nonBlank(root.id, `source "${sourceId}" root id`) as RemoteResourceId,
     title: nonBlank(root.title, `source "${sourceId}" root title`),
@@ -59,6 +62,7 @@ function cloneRoot(sourceId: string, value: unknown): RemoteRootsSnapshot['sourc
       browse: true,
       read: capabilities.read,
       write: capabilities.write,
+      ...capabilities.workspace === undefined ? {} : { workspace: capabilities.workspace },
       ...capabilities.conversation === undefined ? {} : { conversation: capabilities.conversation },
     }),
   })
@@ -120,21 +124,6 @@ function validateConversation(
     rootId: request.rootId,
     ...session === undefined ? {} : { session },
     turns: Object.freeze(turns),
-  })
-}
-
-function validatePromptResult(
-  value: unknown,
-  rootId: RemoteResourceId,
-): RemoteConversationPromptResult {
-  const result = record(value, 'conversation prompt result')
-  if (result.rootId !== rootId) throw new TypeError('remote-roots: conversation prompt result rootId does not match request')
-  return Object.freeze({
-    rootId,
-    sessionId: nonBlank(result.sessionId, 'conversation prompt result sessionId') as RemoteResourceId,
-    sessionTitle: nonBlank(result.sessionTitle, 'conversation prompt result sessionTitle'),
-    turnId: nonBlank(result.turnId, 'conversation prompt result turnId') as RemoteResourceId,
-    turnStatus: nonBlank(result.turnStatus, 'conversation prompt result turnStatus'),
   })
 }
 
@@ -330,18 +319,26 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
     return validateWriteResult(await source.write(request), request)
   }
 
-  /** Select a provider-owned Space or Session for the remote workbench. */
-  activate(sourceId: RemoteRootSourceId, rootId: RemoteResourceId, sessionId?: RemoteResourceId, sessionTitle?: string): void {
+  /** Start a DSH Session for a root, or select one provider Session for read-only history. */
+  async activate(
+    sourceId: RemoteRootSourceId,
+    rootId: RemoteResourceId,
+    sessionId?: RemoteResourceId,
+    sessionTitle?: string,
+  ): Promise<void> {
     nonBlank(rootId, 'activate rootId')
     if (sessionId !== undefined) nonBlank(sessionId, 'activate sessionId')
     const source = this.requireSource(sourceId)
-    if (source.readConversation === undefined || source.promptConversation === undefined) {
-      throw new Error(`remote-roots: source "${sourceId}" does not support conversations`)
-    }
     const published = this.current.sources.find(item => item.sourceId === sourceId)
     const root = published?.status === 'ready' ? published.roots.find(item => item.id === rootId) : undefined
-    if (root === undefined || root.capabilities.conversation !== true) {
-      throw new Error(`remote-roots: source "${sourceId}" has no conversational root "${rootId}"`)
+    if (root === undefined) throw new Error(`remote-roots: source "${sourceId}" has no root "${rootId}"`)
+    if (sessionId === undefined) {
+      if (root.capabilities.workspace !== true || source.startWorkspace === undefined) {
+        throw new Error(`remote-roots: source "${sourceId}" cannot start DSH sessions for root "${rootId}"`)
+      }
+      await source.startWorkspace({ rootId })
+    } else if (root.capabilities.conversation !== true || source.readConversation === undefined) {
+      throw new Error(`remote-roots: source "${sourceId}" has no Session history for root "${rootId}"`)
     }
     this.active = Object.freeze({
       sourceId,
@@ -372,40 +369,10 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
     return validateConversation(await source.readConversation(request), request)
   }
 
-  async promptConversation(sourceId: RemoteRootSourceId, request: {
-    readonly rootId: RemoteResourceId
-    readonly sessionId?: RemoteResourceId
-    readonly text: string
-    readonly signal?: AbortSignal
-  }): Promise<RemoteConversationPromptResult> {
-    nonBlank(request.rootId, 'conversation prompt rootId')
-    if (request.sessionId !== undefined) nonBlank(request.sessionId, 'conversation prompt sessionId')
-    nonBlank(request.text, 'conversation prompt text')
-    const source = this.requireSource(sourceId)
-    if (source.promptConversation === undefined) throw new Error(`remote-roots: source "${sourceId}" does not support conversations`)
-    const result = validatePromptResult(await source.promptConversation(request), request.rootId)
-    this.active = Object.freeze({
-      sourceId,
-      rootId: request.rootId,
-      rootTitle: this.requireRootTitle(sourceId, request.rootId),
-      sessionId: result.sessionId,
-      sessionTitle: result.sessionTitle,
-    })
-    this.publish()
-    return result
-  }
-
   private requireSource(sourceId: RemoteRootSourceId): RemoteRootSource {
     const source = this.sources.get(sourceId)?.source
     if (source === undefined) throw new Error(`remote-roots: unknown source "${sourceId}"`)
     return source
-  }
-
-  private requireRootTitle(sourceId: RemoteRootSourceId, rootId: RemoteResourceId): string {
-    const source = this.current.sources.find(item => item.sourceId === sourceId)
-    const root = source?.status === 'ready' ? source.roots.find(item => item.id === rootId) : undefined
-    if (root === undefined) throw new Error(`remote-roots: source "${sourceId}" has no root "${rootId}"`)
-    return root.title
   }
 
   private publish(): void {
@@ -425,7 +392,9 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
       if (this.active !== undefined) {
         const source = sources.find(item => item.sourceId === this.active?.sourceId)
         const root = source?.status === 'ready' ? source.roots.find(item => item.id === this.active?.rootId) : undefined
-        if (root === undefined || root.capabilities.conversation !== true) this.active = undefined
+        if (root === undefined || (this.active.sessionId === undefined
+          ? root.capabilities.workspace !== true
+          : root.capabilities.conversation !== true)) this.active = undefined
       }
       this.current = Object.freeze({
         revision: this.revision,

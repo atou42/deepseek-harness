@@ -33,11 +33,11 @@
 
 在 Host 加载 Cohub Account，并按需加载浏览器账号界面。它提供设备登录和退出，但不会自行启用 Space、模型、生成或 Board。
 
-### 显示 Cohub Space 与云端 Session
+### 在 DSH Session 中使用 Cohub Space
 
-加载 Cohub Account、Cohub Spaces、通用远程根注册服务与界面，以及 Cohub Spaces 浏览器 Provider。每个可访问的 Space 都显示成带 `Cohub` 标识的根节点；展开后显示该 Space 的 Session，而不是文件。
+加载 Cohub Account、Cohub Spaces、通用远程根注册服务与界面，以及 Cohub Spaces 浏览器 Provider。每个可访问的 Space 都显示成带 `Cohub` 标识的根节点；展开后显示该 Space 的 Session，而不是文件。选择 Space 会创建普通 DSH Session，把 Space 绑定到该 Agent，并打开标准 DSH 工作台。Agent 会保留本地工具，同时获得限定到该 Space 的 Cohub 文件和命令工具。
 
-Space 根节点不会进入 DSH 本地 Workspace。展开它不会改变 Session 工作目录，不会虚构本地路径，不会改变 Shell 行为，也不会启动 Cohub Session。接口只传递不透明的 Space 与 Session 身份。打开 Session 历史属于下一层会话适配，不是文件浏览。
+Space 根节点不会伪装成 DSH 本地 Workspace。选择它时，会把远程根与配置好的普通本地 Workspace 配对，再启动一个 DSH Session：本地工具使用该 cwd，Cohub 工具使用不透明的 Space 身份。展开它只会列出 Cohub Session。提示词不会被路由到 Cohub Agent，已有 Cohub Session 也只会以只读历史打开。
 
 ### 模型、生成和 Board
 
@@ -53,6 +53,6 @@ Board 组合加载 Cohub Account、Cohub Spaces、Cohub Board 和对应浏览器
 
 ## 明确不做
 
-这组插件不会内嵌 Cohub CLI 或 SDK，不会接管 DSH 执行，不会开放远程 Shell，不会静默同步 Space 文件，不会发布 Work，不会把 Space 变成本地 Workspace，也不会提供一体化便利捆绑包。
+这组插件不会内嵌 Cohub CLI 或 SDK，不会替换 DSH Agent，不会替换其本地 Shell，不会静默同步 Space 文件，不会发布 Work，不会把 Space 变成本地 Workspace，也不会提供一体化便利捆绑包。Space 绑定只会增加有界的一次性 Cohub 命令工具。
 
 组合关系保留在明确的 profile patch 或部署层。用户可以按需选择，整个接入不会变成只能整体启用的重型组合。

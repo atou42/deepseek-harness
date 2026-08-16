@@ -18,9 +18,12 @@ function remote(overrides: Partial<CohubSpacesRemoteApi> = {}): CohubSpacesRemot
     listSpaces: vi.fn(async () => []),
     listSessions: vi.fn(async (spaceId: string) => ({ spaceId, sessions: [] })),
     getConversation: vi.fn(async () => { throw new Error('no Session selected') }),
-    promptConversation: vi.fn(async () => { throw new Error('prompt not configured') }),
     ...overrides,
   }
+}
+
+function source(api: CohubSpacesRemoteApi, startDshSession = vi.fn(async () => {})): CohubSpacesRemoteRootSource {
+  return new CohubSpacesRemoteRootSource(api, startDshSession)
 }
 
 async function registry(source: CohubSpacesRemoteRootSource) {
@@ -38,9 +41,9 @@ describe('CohubSpacesRemoteRootSource', () => {
         { id: 'space-2', title: 'Drafts' },
       ]),
     })
-    const source = new CohubSpacesRemoteRootSource(api)
-    const { ctx, unregister } = await registry(source)
-    await source.refresh()
+    const provider = source(api)
+    const { ctx, unregister } = await registry(provider)
+    await provider.refresh()
 
     expect(ctx.remoteRoots.snapshot.getSnapshot()).toEqual({
       revision: 3,
@@ -50,17 +53,17 @@ describe('CohubSpacesRemoteRootSource', () => {
         roots: [
           {
             id: 'space-1', title: 'World Bible', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false, conversation: true },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
           },
           {
             id: 'space-2', title: 'Drafts', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false, conversation: true },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
           },
         ],
       }],
     })
     unregister()
-    source.dispose()
+    provider.dispose()
     expect(ctx.remoteRoots.snapshot.getSnapshot().sources).toEqual([])
     await ctx.fiber.dispose()
   })
@@ -80,9 +83,9 @@ describe('CohubSpacesRemoteRootSource', () => {
       ],
     }))
     const api = remote({ listSessions })
-    const source = new CohubSpacesRemoteRootSource(api)
+    const provider = source(api)
     const rootId = 'space-1' as RemoteResourceId
-    const listing = await source.list({ rootId, parentId: rootId })
+    const listing = await provider.list({ rootId, parentId: rootId })
 
     expect(listSessions).toHaveBeenCalledWith('space-1')
     expect(listing).toEqual({
@@ -100,10 +103,28 @@ describe('CohubSpacesRemoteRootSource', () => {
       ],
     })
     expect(JSON.stringify(listing)).not.toContain('/workspace')
-    source.dispose()
+    provider.dispose()
   })
 
-  it('projects Cohub history and first-prompt creation through opaque remote identities', async () => {
+  it('gives an untitled Cohub Session a stable display name', async () => {
+    const provider = source(remote({
+      listSessions: vi.fn(async spaceId => ({
+        spaceId,
+        sessions: [{
+          id: '18c0d6a5-0079-47e4-8808-9c384b5d3b4b', spaceId, title: '   ', status: 'active',
+          latestMessageText: 'Investigate the build', updatedAt: '2026-08-17T10:00:00.000Z',
+        }],
+      })),
+    }))
+    const rootId = 'space-1' as RemoteResourceId
+
+    await expect(provider.list({ rootId, parentId: rootId })).resolves.toMatchObject({
+      entries: [{ name: 'Investigate the build' }],
+    })
+    provider.dispose()
+  })
+
+  it('projects Cohub history and starts a DSH Session for the selected Space', async () => {
     const getConversation = vi.fn(async (spaceId: string, sessionId: string) => ({
       spaceId,
       session: { id: sessionId, spaceId, title: 'Existing chat', status: 'active', updatedAt: '2026-08-16T10:00:00.000Z' },
@@ -112,28 +133,20 @@ describe('CohubSpacesRemoteRootSource', () => {
         createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
       }],
     }))
-    const promptConversation = vi.fn(async (spaceId: string) => ({
-      spaceId, sessionId: 'session-new', sessionTitle: 'New chat', turnId: 'turn-new', turnStatus: 'running',
-    }))
-    const source = new CohubSpacesRemoteRootSource(remote({ getConversation, promptConversation }))
+    const startDshSession = vi.fn(async () => {})
+    const provider = source(remote({ getConversation }), startDshSession)
     const rootId = 'space-1' as RemoteResourceId
     const existingId = JSON.stringify(['space-1', 'session-1']) as RemoteResourceId
 
-    await expect(source.readConversation({ rootId, sessionId: existingId })).resolves.toMatchObject({
+    await expect(provider.readConversation({ rootId, sessionId: existingId })).resolves.toMatchObject({
       rootId,
       session: { id: existingId, title: 'Existing chat', status: 'active' },
       turns: [{ id: JSON.stringify(['space-1', 'session-1', 'turn-1']), userText: 'hello', assistantText: 'world' }],
     })
-    await expect(source.promptConversation({ rootId, text: 'start here' })).resolves.toEqual({
-      rootId,
-      sessionId: JSON.stringify(['space-1', 'session-new']),
-      sessionTitle: 'New chat',
-      turnId: JSON.stringify(['space-1', 'session-new', 'turn-new']),
-      turnStatus: 'running',
-    })
+    await expect(provider.startWorkspace({ rootId })).resolves.toBeUndefined()
     expect(getConversation).toHaveBeenCalledWith('space-1', 'session-1')
-    expect(promptConversation).toHaveBeenCalledWith('space-1', undefined, 'start here')
-    source.dispose()
+    expect(startDshSession).toHaveBeenCalledWith('space-1')
+    provider.dispose()
   })
 
   it('publishes failures, recovers on refresh, and ignores completion after disposal', async () => {
@@ -144,34 +157,34 @@ describe('CohubSpacesRemoteRootSource', () => {
         .mockResolvedValueOnce([{ id: 'space-1', title: 'Recovered' }])
         .mockImplementationOnce(() => new Promise((resolve) => { resolveLate = resolve })),
     })
-    const source = new CohubSpacesRemoteRootSource(api)
-    await source.refresh()
-    expect(source.snapshot.getSnapshot()).toEqual({ status: 'error', roots: [], message: 'sign in required' })
-    await source.refresh()
-    expect(source.snapshot.getSnapshot()).toMatchObject({
+    const provider = source(api)
+    await provider.refresh()
+    expect(provider.snapshot.getSnapshot()).toEqual({ status: 'error', roots: [], message: 'sign in required' })
+    await provider.refresh()
+    expect(provider.snapshot.getSnapshot()).toMatchObject({
       status: 'ready', roots: [{ id: 'space-1', title: 'Recovered' }],
     })
 
-    const late = source.refresh()
+    const late = provider.refresh()
     await Promise.resolve()
-    source.dispose()
+    provider.dispose()
     resolveLate([{ id: 'space-late', title: 'Late' }])
     await late
-    expect(source.snapshot.getSnapshot()).toEqual({ status: 'loading', roots: [] })
+    expect(provider.snapshot.getSnapshot()).toEqual({ status: 'loading', roots: [] })
   })
 
   it('keeps account transport failures visible without calling the Space API', async () => {
     const listSpaces = vi.fn(async () => [])
-    const source = new CohubSpacesRemoteRootSource(remote({
+    const provider = source(remote({
       getAccount: vi.fn(async () => { throw new Error('account carrier offline') }),
       listSpaces,
     }))
-    await source.refresh()
-    expect(source.snapshot.getSnapshot()).toEqual({
+    await provider.refresh()
+    expect(provider.snapshot.getSnapshot()).toEqual({
       status: 'error', roots: [], message: 'account carrier offline',
     })
     expect(listSpaces).not.toHaveBeenCalled()
-    source.dispose()
+    provider.dispose()
   })
 
   it('rejects an aborted operation while safely observing its late Remote result', async () => {
@@ -181,15 +194,15 @@ describe('CohubSpacesRemoteRootSource', () => {
         (done) => { resolve = done },
       )),
     })
-    const source = new CohubSpacesRemoteRootSource(api)
+    const provider = source(api)
     const controller = new AbortController()
     const rootId = 'space-1' as RemoteResourceId
-    const pending = source.list({ rootId, parentId: rootId, signal: controller.signal })
+    const pending = provider.list({ rootId, parentId: rootId, signal: controller.signal })
     controller.abort(new Error('closed Space'))
     await expect(pending).rejects.toThrow('closed Space')
     resolve({ spaceId: 'space-1', sessions: [] })
     await Promise.resolve()
-    source.dispose()
+    provider.dispose()
   })
 
   it('publishes authentication-required and avoids Space I/O while anonymous', async () => {
@@ -213,6 +226,17 @@ describe('CohubSpacesRemoteRootSource', () => {
     const listSpaces = vi.fn(async () => ({
       ok: true as const, value: [{ id: 'space-1', title: 'World' }],
     }))
+    const create = vi.fn(async () => 'dsh-session-1')
+    const open = vi.fn()
+    const createWorkspace = vi.fn(async () => ({ workspaceId: 'local-workspace-1' }))
+    const getDshSessionStart = vi.fn(async () => ({
+      ok: true as const,
+      value: { spaceId: 'space-1', cwd: '/local/deepseek-harness' },
+    }))
+    const bindDshSession = vi.fn(async () => ({
+      ok: true as const,
+      value: { spaceId: 'space-1', spaceTitle: 'World', dshSessionId: 'dsh-session-1' },
+    }))
     const ctx = {
       remote: {
         cohubAccount: { getAccount },
@@ -220,11 +244,14 @@ describe('CohubSpacesRemoteRootSource', () => {
           listSpaces,
           listSessions: vi.fn(),
           getConversation: vi.fn(),
-          promptConversation: vi.fn(),
+          getDshSessionStart,
+          bindDshSession,
         },
         $on: vi.fn((_event, listener: () => void) => { changed = listener; return off }),
       },
       remoteRoots: { register },
+      sessions: { create, open },
+      workspaces: { create: createWorkspace },
     } as unknown as ClientContext
 
     const dispose = apply(ctx)
@@ -244,6 +271,14 @@ describe('CohubSpacesRemoteRootSource', () => {
       })
     })
     expect(listSpaces).toHaveBeenCalledOnce()
+    await registeredSource!.startWorkspace({ rootId: 'space-1' as RemoteResourceId })
+    expect(getDshSessionStart).toHaveBeenCalledWith('space-1')
+    expect(createWorkspace).toHaveBeenCalledWith({ path: '/local/deepseek-harness' })
+    expect(create).toHaveBeenCalledWith({ workspaceId: 'local-workspace-1' })
+    expect(bindDshSession).toHaveBeenCalledWith('space-1', 'dsh-session-1')
+    expect(open).toHaveBeenCalledWith('dsh-session-1')
+    expect(create.mock.invocationCallOrder[0]).toBeLessThan(bindDshSession.mock.invocationCallOrder[0]!)
+    expect(bindDshSession.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]!)
     dispose()
     expect(off).toHaveBeenCalledOnce()
     expect(unregister).toHaveBeenCalledOnce()

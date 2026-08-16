@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { IconCloseOutline16, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { RemoteResourceId } from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { RemoteConversationOverlayProps } from './contract.ts'
 import css from './RemoteConversationOverlay.module.css'
 
@@ -19,66 +18,25 @@ function terminal(status: string): boolean {
 
 /** Render the currently selected provider-owned remote conversation. */
 export function RemoteConversationOverlay({
-  useRemoteRoots, deactivate, readConversation, promptConversation, t,
+  useRemoteRoots, deactivate, readConversation, t,
 }: RemoteConversationOverlayProps) {
   const active = useRemoteRoots(snapshot => snapshot.active)
   const [conversation, setConversation] = useState<ConversationState>({ status: 'loading' })
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
-  const [sessionOverride, setSessionOverride] = useState<RemoteResourceId>()
-  const [watchedTurn, setWatchedTurn] = useState<RemoteResourceId>()
-  const [refresh, setRefresh] = useState(0)
 
-  const activeKey = active === undefined ? '' : `${active.sourceId}\0${active.rootId}`
+  const activeKey = active?.sessionId === undefined ? '' : `${active.sourceId}\0${active.rootId}\0${active.sessionId}`
   useEffect(() => {
-    setSessionOverride(undefined)
-    setWatchedTurn(undefined)
-    setDraft('')
-  }, [activeKey])
-
-  const sessionId = sessionOverride ?? active?.sessionId
-  useEffect(() => {
-    if (active === undefined) return
+    if (active?.sessionId === undefined) return
     let live = true
     setConversation({ status: 'loading' })
-    const request = sessionId === undefined ? { rootId: active.rootId } : { rootId: active.rootId, sessionId }
-    void readConversation(active.sourceId, request).then((value) => {
+    void readConversation(active.sourceId, { rootId: active.rootId, sessionId: active.sessionId }).then((value) => {
       if (live) setConversation({ status: 'ready', value })
     }, (error: unknown) => {
       if (live) setConversation({ status: 'error', message: message(error) })
     })
     return () => { live = false }
-  }, [activeKey, active, readConversation, refresh, sessionId])
+  }, [activeKey, active, readConversation])
 
-  useEffect(() => {
-    if (watchedTurn === undefined || conversation.status !== 'ready') return
-    const turn = conversation.value.turns.find(item => item.id === watchedTurn)
-    if (turn !== undefined && terminal(turn.status)) {
-      setWatchedTurn(undefined)
-      return
-    }
-    const timer = window.setTimeout(() => { setRefresh(value => value + 1) }, 1000)
-    return () => { window.clearTimeout(timer) }
-  }, [conversation, watchedTurn])
-
-  if (active === undefined) return null
-
-  const send = (): void => {
-    const text = draft.trim()
-    if (!text || sending) return
-    setSending(true)
-    const request = sessionId === undefined
-      ? { rootId: active.rootId, text }
-      : { rootId: active.rootId, sessionId, text }
-    void promptConversation(active.sourceId, request).then((result) => {
-      setDraft('')
-      setSessionOverride(result.sessionId)
-      setWatchedTurn(result.turnId)
-      setRefresh(value => value + 1)
-    }, (error: unknown) => {
-      setConversation({ status: 'error', message: message(error) })
-    }).finally(() => { setSending(false) })
-  }
+  if (active?.sessionId === undefined) return null
 
   return (
     <div className={css.overlay} role="dialog" aria-modal="true" aria-label={t('conversation.title')}>
@@ -87,7 +45,7 @@ export function RemoteConversationOverlay({
         <header className={css.header}>
           <div>
             <h2>{active.rootTitle}</h2>
-            <p>{conversation.status === 'ready' ? conversation.value.session?.title ?? t('conversation.new') : active.sessionTitle ?? t('conversation.new')}</p>
+            <p>{conversation.status === 'ready' ? conversation.value.session?.title ?? active.sessionTitle : active.sessionTitle}</p>
           </div>
           <button type="button" className={css.iconButton} aria-label={t('conversation.close')} onClick={deactivate}><IconCloseOutline16 /></button>
         </header>
@@ -108,19 +66,6 @@ export function RemoteConversationOverlay({
             </article>
           ))}
         </main>
-        <footer className={css.composer}>
-          <textarea
-            value={draft}
-            aria-label={t('conversation.placeholder')}
-            placeholder={t('conversation.placeholder')}
-            disabled={sending}
-            onChange={(event) => { setDraft(event.target.value) }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() }
-            }}
-          />
-          <button type="button" disabled={sending || !draft.trim()} onClick={send}>{t(sending ? 'conversation.sending' : 'conversation.send')}</button>
-        </footer>
       </section>
     </div>
   )

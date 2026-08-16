@@ -19,11 +19,10 @@ async function bench() {
   const activate = vi.fn()
   const deactivate = vi.fn()
   const readConversation = vi.fn()
-  const promptConversation = vi.fn()
   ctx.provide('remoteRoots', {
-    snapshot, list, activate, deactivate, readConversation, promptConversation,
+    snapshot, list, activate, deactivate, readConversation,
   } as never)
-  return { ctx, slots, locale, snapshot, list, activate, deactivate, readConversation, promptConversation }
+  return { ctx, slots, locale, snapshot, list, activate, deactivate, readConversation }
 }
 
 function declare(slots: SlotRegistry): () => void {

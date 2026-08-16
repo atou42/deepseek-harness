@@ -29,9 +29,8 @@ export function apply(ctx: ClientContext): void {
       inject: (): RemoteRootTreeInjected => ({
         hooks: { remoteRoots: ctx.remoteRoots.snapshot },
         list: (sourceId, request) => ctx.remoteRoots.list(sourceId, request),
-        activate: (sourceId, rootId, sessionId, sessionTitle) => {
-          ctx.remoteRoots.activate(sourceId, rootId, sessionId, sessionTitle)
-        },
+        activate: (sourceId, rootId, sessionId, sessionTitle) =>
+          ctx.remoteRoots.activate(sourceId, rootId, sessionId, sessionTitle),
       }),
     },
     RemoteRootTree,
@@ -43,7 +42,6 @@ export function apply(ctx: ClientContext): void {
         hooks: { remoteRoots: ctx.remoteRoots.snapshot },
         deactivate: () => { ctx.remoteRoots.deactivate() },
         readConversation: (sourceId, request) => ctx.remoteRoots.readConversation(sourceId, request),
-        promptConversation: (sourceId, request) => ctx.remoteRoots.promptConversation(sourceId, request),
       }),
     },
     RemoteConversationOverlay,

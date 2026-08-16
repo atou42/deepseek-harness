@@ -1,6 +1,6 @@
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  RemoteConversationPromptResult, RemoteConversationView, RemoteDirectoryListing,
+  RemoteConversationView, RemoteDirectoryListing,
   RemoteResourceId, RemoteRootSource, RemoteRootSourceId,
   RemoteRootsSnapshot, RemoteTextFile, RemoteTextWriteResult,
 } from '../types.ts'
@@ -26,17 +26,11 @@ export interface RemoteRootsServiceContract {
     readonly ifRevision: string
     readonly signal?: AbortSignal
   }): Promise<RemoteTextWriteResult>
-  activate(sourceId: RemoteRootSourceId, rootId: RemoteResourceId, sessionId?: RemoteResourceId, sessionTitle?: string): void
+  activate(sourceId: RemoteRootSourceId, rootId: RemoteResourceId, sessionId?: RemoteResourceId, sessionTitle?: string): Promise<void>
   deactivate(): void
   readConversation(sourceId: RemoteRootSourceId, request: {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationView>
-  promptConversation(sourceId: RemoteRootSourceId, request: {
-    readonly rootId: RemoteResourceId
-    readonly sessionId?: RemoteResourceId
-    readonly text: string
-    readonly signal?: AbortSignal
-  }): Promise<RemoteConversationPromptResult>
 }

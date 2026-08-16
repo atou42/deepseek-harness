@@ -98,10 +98,10 @@ export function apply(ctx: ClientContext): void {
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const remoteRootsSource = optionalRemoteRoots(ctx)
-  const activateRemote = (sourceId: Parameters<RemoteRootsServiceContract['activate']>[0], rootId: Parameters<RemoteRootsServiceContract['activate']>[1]): void => {
+  const activateRemote = async (sourceId: Parameters<RemoteRootsServiceContract['activate']>[0], rootId: Parameters<RemoteRootsServiceContract['activate']>[1]): Promise<void> => {
     const service = ctx.get('remoteRoots')
     if (service === undefined) throw new Error('ui-workspace: remote roots are unavailable')
-    service.activate(sourceId, rootId)
+    await service.activate(sourceId, rootId)
   }
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits

@@ -1,5 +1,7 @@
+/** Locale namespace for remote-root UI strings. */
 export const NS = 'remoteRoots'
 
+/** Simplified Chinese remote-root strings. */
 export const zh = {
   'section': '远程',
   'tree.aria': '远程文件夹',
@@ -17,18 +19,16 @@ export const zh = {
   'session': '会话 {name}',
   'conversation.title': 'Cohub 会话',
   'conversation.close': '关闭 Cohub 会话',
-  'conversation.new': '新会话',
   'conversation.loading': '正在读取会话',
-  'conversation.empty': '发送第一条消息，开始这个 Space 的新会话。',
-  'conversation.placeholder': '给 Cohub 里的 Agent 发消息',
-  'conversation.send': '发送',
-  'conversation.sending': '发送中…',
+  'conversation.empty': '这个 Cohub 会话还没有 Turn。',
   'conversation.running': 'Agent 正在处理…',
   'conversation.error': '会话出错：{message}',
 } as const
 
+/** Supported remote-root locale key. */
 export type RemoteRootsKey = keyof typeof zh
 
+/** English remote-root strings. */
 export const en: Record<RemoteRootsKey, string> = {
   'section': 'Remote',
   'tree.aria': 'Remote folders',
@@ -46,12 +46,8 @@ export const en: Record<RemoteRootsKey, string> = {
   'session': 'Session {name}',
   'conversation.title': 'Cohub conversation',
   'conversation.close': 'Close Cohub conversation',
-  'conversation.new': 'New conversation',
   'conversation.loading': 'Loading conversation',
-  'conversation.empty': 'Send the first message to start a conversation in this Space.',
-  'conversation.placeholder': 'Message the Agent in Cohub',
-  'conversation.send': 'Send',
-  'conversation.sending': 'Sending…',
+  'conversation.empty': 'This Cohub Session has no Turns yet.',
   'conversation.running': 'Agent is working…',
   'conversation.error': 'Conversation error: {message}',
 }

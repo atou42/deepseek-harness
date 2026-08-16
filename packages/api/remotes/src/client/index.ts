@@ -29,7 +29,7 @@ export type {
   CohubBoardRecord, CohubBoardSnapshot,
 } from '@deepseek-ai/dsh-cohub-board/types'
 export type {
-  CohubConversationPromptResult, CohubConversationView, CohubSessionView,
+  CohubConversationView, CohubDshSessionBinding, CohubDshSessionStart, CohubSessionView,
   CohubSpaceDirectory, CohubSpaceEntry, CohubSpaceSessionList, CohubSpaceTextFile,
   CohubSpaceView, CohubSpaceWriteResult, CohubTurnView,
 } from '@deepseek-ai/dsh-cohub-spaces/types'

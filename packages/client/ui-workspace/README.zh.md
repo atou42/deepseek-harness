@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-共享 Workspace 浏览器与选择器插件。`WorkspaceBrowser` 填充侧边栏的 `sidebar.workspaces` slot，`WorkspacePicker` 则填充页面局部 Session Intent 主视觉区的 `conversation.hero.workspace` slot。主选择器会一起列出本地 Workspace 和可对话的远程根；选择远程根时，只激活供应方持有的会话工作台，不会把它接纳成本地 Workspace。
+共享 Workspace 浏览器与选择器插件。`WorkspaceBrowser` 填充侧边栏的 `sidebar.workspaces` slot，`WorkspacePicker` 则填充页面局部 Session Intent 主视觉区的 `conversation.hero.workspace` slot。主选择器会一起列出本地 Workspace 和远程 DSH 工作根；选择远程根时，会等待 Provider 完成准备，再打开它创建的普通 DSH Session，不会把远程根接纳成本地 Workspace。
 
 侧边栏注册还会声明与供应方无关的 `sidebar.workspaces.remoteRoots` 子 slot。单独加载的展示包可以在这里渲染带标识、形似文件夹的远程根，但这个 slot 的空 owner share 不会授予 Workspace、路径、cwd 或 Shell 语义。进行本地 Session 搜索时，远程根会隐藏，并且永远不会进入 `useWorkspaces`。
 
@@ -24,7 +24,7 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 
 ## 模型体验
 
-无直接影响。远程选择只会激活所属 Provider；之后的消息由独立会话界面负责。
+无直接影响，因为所选 Provider 只会准备并打开负责后续提示词的 DSH Session。
 
 #### KV Cache 影响
 

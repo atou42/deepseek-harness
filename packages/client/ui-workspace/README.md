@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Shared Workspace browser and picker plugin. `WorkspaceBrowser` fills the sidebar's `sidebar.workspaces` slot, while `WorkspacePicker` fills the page-local Session Intent hero's `conversation.hero.workspace` slot. The main picker lists local Workspaces and conversational remote roots together; selecting a remote root activates its provider-owned conversation workbench without adopting it as a local Workspace.
+Shared Workspace browser and picker plugin. `WorkspaceBrowser` fills the sidebar's `sidebar.workspaces` slot, while `WorkspacePicker` fills the page-local Session Intent hero's `conversation.hero.workspace` slot. The main picker lists local Workspaces and remote DSH-workspace roots together; selecting a remote root awaits its provider, then opens the ordinary DSH Session the provider prepared without adopting the root as a local Workspace.
 
 The sidebar registration also declares a provider-neutral `sidebar.workspaces.remoteRoots` child hole. A separately loadable presentation package may render marked, folder-like remote roots there, but the hole's empty owner share deliberately grants no Workspace, path, cwd, or Shell semantics. Remote roots disappear during local Session search and never enter `useWorkspaces`.
 
@@ -24,7 +24,7 @@ The shared sidebar projection hides rows whose durable Session summary has `orig
 
 ## Model Experience
 
-None directly. Remote selection only activates the owning provider; its separate conversation UI owns any later prompt.
+None, as the selected provider prepares and opens the DSH Session that owns later prompts.
 
 #### KV Cache effect
 

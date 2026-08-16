@@ -324,7 +324,7 @@ describe('RemoteRootsService', () => {
     expect(service.snapshot.getSnapshot().sources[0]?.status).toBe('loading')
   })
 
-  it('selects a conversational remote root and routes history and prompts without creating a local Workspace', async () => {
+  it('starts a DSH workspace session for a remote root and keeps provider Sessions read-only', async () => {
     const { service } = await bench()
     const fixture = provider()
     const readConversation = vi.fn(async () => ({
@@ -332,17 +332,11 @@ describe('RemoteRootsService', () => {
       session: undefined,
       turns: [],
     }))
-    const promptConversation = vi.fn(async () => ({
-      rootId: resourceId('space:one'),
-      sessionId: resourceId('session:one'),
-      sessionTitle: 'New remote chat',
-      turnId: resourceId('turn:one'),
-      turnStatus: 'running',
-    }))
+    const startWorkspace = vi.fn(async () => {})
     service.register({
       ...fixture.source,
       readConversation,
-      promptConversation,
+      startWorkspace,
     } as unknown as RemoteRootSource)
     fixture.snapshot.set({
       status: 'ready',
@@ -350,25 +344,20 @@ describe('RemoteRootsService', () => {
         id: resourceId('space:one'),
         title: 'Cloud Space',
         marker: { kind: 'cloud', label: 'Cloud' },
-        capabilities: { browse: true, read: false, write: false, conversation: true },
+        capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
       }],
     } as unknown as RemoteRootSourceSnapshot)
     const conversations = service as unknown as {
-      activate(sourceId: RemoteRootSourceId, rootId: RemoteResourceId, sessionId?: RemoteResourceId): void
+      activate(sourceId: RemoteRootSourceId, rootId: RemoteResourceId, sessionId?: RemoteResourceId): Promise<void>
       readConversation(sourceId: RemoteRootSourceId, request: { rootId: RemoteResourceId; sessionId?: RemoteResourceId }): Promise<unknown>
-      promptConversation(
-        sourceId: RemoteRootSourceId,
-        request: { rootId: RemoteResourceId; sessionId?: RemoteResourceId; text: string },
-      ): Promise<unknown>
     }
 
-    conversations.activate(sourceId('fixture.remote'), resourceId('space:one'))
+    await conversations.activate(sourceId('fixture.remote'), resourceId('space:one'))
+    expect(startWorkspace).toHaveBeenCalledWith({ rootId: resourceId('space:one') })
     expect((service.snapshot.getSnapshot() as unknown as { active: unknown }).active).toEqual({
       sourceId: sourceId('fixture.remote'), rootId: resourceId('space:one'), rootTitle: 'Cloud Space',
     })
     await conversations.readConversation(sourceId('fixture.remote'), { rootId: resourceId('space:one') })
-    await conversations.promptConversation(sourceId('fixture.remote'), { rootId: resourceId('space:one'), text: 'hello' })
     expect(readConversation).toHaveBeenCalledWith({ rootId: resourceId('space:one'), sessionId: undefined })
-    expect(promptConversation).toHaveBeenCalledWith({ rootId: resourceId('space:one'), sessionId: undefined, text: 'hello' })
   })
 })

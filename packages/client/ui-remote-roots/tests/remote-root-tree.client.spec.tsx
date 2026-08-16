@@ -36,7 +36,7 @@ function readySnapshot(): RemoteRootsSnapshot {
 describe('RemoteRootTree', () => {
   it('opens a provider-owned Session in the selected Space', async () => {
     const source = createSnapshotStore(readySnapshot())
-    const activate = vi.fn()
+    const activate = vi.fn(async () => {})
     const list = vi.fn(async (_sourceId: RemoteRootSourceId, { rootId, parentId }: Parameters<RemoteRootTreeProps['list']>[1]) => ({
       rootId,
       parentId,
