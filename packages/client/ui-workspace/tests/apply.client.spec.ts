@@ -115,13 +115,14 @@ describe('ui-workspace apply', () => {
     expect(b.create).toHaveBeenCalledWith({ path: '/tmp/project' })
   })
 
-  it('declares the two directory-flow holes and reports their occupancy per surface', async () => {
+  it('declares directory-flow and remote-root holes and reports flow occupancy per surface', async () => {
     const b = await bench()
     declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace')
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     // Registration declared the child holes (declaration = render authorization).
     expect(b.slots.spec('sidebar.workspaces.directoryFlow')).toMatchObject({ kind: 'single' })
     expect(b.slots.spec('conversation.hero.workspace.directoryFlow')).toMatchObject({ kind: 'single' })
+    expect(b.slots.spec('sidebar.workspaces.remoteRoots')).toMatchObject({ kind: 'single', scope: 'root' })
 
     const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
     const picker = (b.slots.entries('conversation.hero.workspace')[0]!.inject as () => WorkspacePickerInjected)()

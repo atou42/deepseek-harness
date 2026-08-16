@@ -14,6 +14,8 @@ Introduce a generic client-side remote-root registry. Each source publishes expl
 
 Cohub remains outside this generic package. One host-side Cohub Account capability will own credentials and session lifecycle. Separate Cohub adapters will expose Space files, model access, generation, and Board through generic seams. Identity-free tree, file, Board, and result presentation packages will depend only on those seams. An optional bundle may compose leaves but may not become a second owner of state.
 
+The Workspace browser owns only one empty-share child slot that places remote roots beside local rows. `@deepseek-ai/dsh-client-ui-remote-roots` occupies it independently, observes the generic registry, renders each marked root as a folder, and lazily lists children through opaque identifiers. It cancels a request when its folder closes, ignores late completion, surfaces provider errors with retry, and unregisters its entire surface on unload. Local Session search hides the remote tree instead of claiming to search it.
+
 ## Consequences
 
 Remote roots can look folder-like while remaining semantically distinct from Workspace, cwd, and Shell. Other cloud providers can reuse the same UI. More packages and explicit dependency edges are required, but each capability can load and unload independently. Board and generated assets need their own contracts instead of being smuggled through the file tree.

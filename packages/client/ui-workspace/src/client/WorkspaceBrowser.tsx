@@ -1106,6 +1106,11 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
+        {/* Remote roots are adjacent presentation only. Search continues to
+            target local Session content, so its active result view hides
+            this independently supplied tree. */}
+        {wide && normalizedQuery === ''
+          && renderSlot('sidebar.workspaces.remoteRoots', {})}
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults

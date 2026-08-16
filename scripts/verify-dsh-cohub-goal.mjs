@@ -1,7 +1,11 @@
 import { spawnSync } from 'node:child_process'
 
-const targets = ['packages/client/remote-roots/tests']
-const result = spawnSync('pnpm', ['exec', 'vitest', 'run', ...targets, '--reporter=json'], {
+const targets = [
+  'packages/client/remote-roots/tests',
+  'packages/client/ui-remote-roots/tests',
+  'packages/client/ui-workspace/tests/apply.client.spec.ts',
+]
+const result = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...targets, '--reporter=json'], {
   encoding: 'utf8',
   env: { ...process.env, NO_COLOR: '1' },
 })
@@ -15,4 +19,3 @@ const passed = report.numPassedTests
 if (!Number.isSafeInteger(passed)) throw new TypeError('goal verifier: Vitest did not report an integer pass count')
 if (process.argv.includes('--metric-only')) process.stdout.write(`${passed}\n`)
 else process.stdout.write(`DSH-Cohub acceptance checks passed: ${passed}\n`)
-

@@ -23,3 +23,13 @@ The full Web build also succeeds. Web replay did not pass and is not counted as 
 The active worktree remains on `master` at the locked commit with its same 48 unrelated status entries. The isolated branch contains only the implementation commit plus untracked autoresearch audit artifacts. Task-owned temporary verification copies and Harness homes were removed after evidence capture.
 
 Next action: declare a generic child slot inside the sidebar Workspace browser and add an identity-free remote-root tree package. It must render marked roots and lazy folder listings without adding them to `useWorkspaces`, changing Session cwd, or requiring a Cohub account.
+
+## 2026-08-16 · Anonymous remote-root tree assembled
+
+The Workspace browser now declares one provider-neutral child slot beside its local list. The independently loadable `@deepseek-ai/dsh-client-ui-remote-roots` package fills it without account or Cohub dependencies. It renders cloud/network/external markers, lazily lists folders through opaque source/root/parent identities, exposes loading and provider errors, retries explicitly, aborts a request on collapse or unload, and ignores late completion. Local Session search hides this tree and continues to search only the behavior it actually owns.
+
+A real Slot runtime composition mounts the Workspace browser, remote-root UI, and registry together. A marked cloud root appears, expands through the provider callback, never enters the Workspace list, and disappears when the provider unregisters. Component tests cover folder and file rendering, exact identity and AbortSignal routing, retry after failure, cancellation with late completion, and source loading/error transitions. The package and affected Workspace package type-check, the new bundle builds, and 53 targeted tests pass across the new package and affected Workspace surfaces. The complete GUI lane also passes 276 files and 3,770 tests, with one existing skip. The complete repository build passes with exit code 0.
+
+The dependency lock was refreshed offline with install scripts disabled. No native hook, network fetch, profile installation, runtime enablement, or main-worktree write occurred. The existing Web replay blocker remains unchanged and is not counted as evidence for this slice.
+
+Next action: harden provider response validation, then introduce the single host-side Cohub Account capability and the separately unloadable Cohub Space/files adapter.
