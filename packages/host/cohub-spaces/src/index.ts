@@ -75,6 +75,13 @@ function safeInteger(value: unknown, field: string): number {
   return value as number
 }
 
+function nonNegativeNumber(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) {
+    throw new TypeError(`cohub-spaces: ${field} must be a non-negative finite safe number`)
+  }
+  return value
+}
+
 function normalizeUrl(value: string): string {
   const parsed = new URL(nonBlank(value, 'apiBaseUrl').replace(/\/+$/, ''))
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
@@ -113,10 +120,10 @@ function revision(mtimeMs: number, size: number): string {
 }
 
 function expectedRevision(value: string): ExpectedRevision {
-  const match = /^(0|[1-9]\d*):(0|[1-9]\d*)$/.exec(nonBlank(value, 'revision'))
+  const match = /^((?:0|[1-9]\d*)(?:\.\d*[1-9])?):(0|[1-9]\d*)$/.exec(nonBlank(value, 'revision'))
   if (match === null) throw new TypeError('cohub-spaces: revision is malformed')
   return {
-    mtimeMs: safeInteger(Number(match[1]), 'revision mtimeMs'),
+    mtimeMs: nonNegativeNumber(Number(match[1]), 'revision mtimeMs'),
     size: safeInteger(Number(match[2]), 'revision size'),
   }
 }
@@ -154,7 +161,7 @@ function parseEntry(value: unknown, requestedPath: string, index: number): Cohub
     throw new TypeError(`cohub-spaces: tree entry "${path}" has invalid type`)
   }
   const size = safeInteger(entry.size, `tree entry "${path}" size`)
-  const mtimeMs = safeInteger(entry.mtimeMs, `tree entry "${path}" mtimeMs`)
+  const mtimeMs = nonNegativeNumber(entry.mtimeMs, `tree entry "${path}" mtimeMs`)
   return Object.freeze({
     path,
     name,
@@ -192,7 +199,7 @@ function parseTextFile(value: unknown, spaceId: string, requestedPath: string): 
   }
   if (typeof body.content !== 'string') throw new TypeError('cohub-spaces: file content must be a string')
   const size = safeInteger(body.size, 'file size')
-  const mtimeMs = safeInteger(body.mtimeMs, 'file mtimeMs')
+  const mtimeMs = nonNegativeNumber(body.mtimeMs, 'file mtimeMs')
   return Object.freeze({
     spaceId,
     path: requestedPath,
@@ -328,7 +335,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
     const body = record(result.data, 'write response')
     if (body.ok !== true || body.path !== path) throw new TypeError('cohub-spaces: write response does not match request')
     const size = safeInteger(body.size, 'write response size')
-    const mtimeMs = safeInteger(body.mtimeMs, 'write response mtimeMs')
+    const mtimeMs = nonNegativeNumber(body.mtimeMs, 'write response mtimeMs')
     return Object.freeze({
       ok: true,
       value: Object.freeze({ spaceId, path, content, revision: revision(mtimeMs, size) }),

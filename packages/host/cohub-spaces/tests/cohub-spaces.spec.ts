@@ -108,6 +108,41 @@ describe('CohubSpacesGateway', () => {
       .toBe('Bearer account-token')
   })
 
+  it('preserves fractional millisecond mtimes in revisions and compare-and-set writes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({
+        path: '',
+        entries: [
+          { name: '.agents', path: '.agents', type: 'dir', size: 4096, mimeType: null, mtimeMs: 1786849956679.8323 },
+        ],
+      }))
+      .mockResolvedValueOnce(json({
+        path: 'notes.md', name: 'notes.md', size: 5, mimeType: 'text/markdown', mtimeMs: 1786849956680.125,
+        kind: 'text', encoding: 'utf-8', content: 'hello', delivery: 'inline',
+      }))
+      .mockResolvedValueOnce(json({ ok: true, path: 'notes.md', size: 4, mtimeMs: 1786849956681.5 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces } = await boot()
+
+    await expect(spaces.listDirectory('space-1', '')).resolves.toEqual({
+      spaceId: 'space-1',
+      path: '',
+      entries: [
+        { path: '.agents', name: '.agents', kind: 'folder', size: 4096, revision: '1786849956679.8323:4096' },
+      ],
+    })
+    await expect(spaces.readText('space-1', 'notes.md')).resolves.toEqual({
+      spaceId: 'space-1', path: 'notes.md', content: 'hello', revision: '1786849956680.125:5',
+    })
+    await expect(spaces.writeText('space-1', 'notes.md', 'next', '1786849956680.125:5')).resolves.toEqual({
+      ok: true,
+      value: { spaceId: 'space-1', path: 'notes.md', content: 'next', revision: '1786849956681.5:4' },
+    })
+    expect(JSON.parse((fetchMock.mock.calls[2]?.[1] as RequestInit).body as string)).toEqual({
+      path: 'notes.md', content: 'next', encoding: 'utf-8', expected: { mtimeMs: 1786849956680.125, size: 5 },
+    })
+  })
+
   it('reads inline text and converts stale writes into explicit conflicts', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({
