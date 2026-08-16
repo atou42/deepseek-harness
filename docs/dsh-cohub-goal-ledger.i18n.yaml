@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/dsh-cohub-goal-ledger.md
-dsh-cohub-goal-ledger.md: 71295920eee7eb52435cb4ce32895cfda32d5e8b
-dsh-cohub-goal-ledger.zh.md: 969204a0e3e24b5ee2cf444cfad991bcab88a5f7
+dsh-cohub-goal-ledger.md: 499a3a3cd785788912d74555a1181063e90aee83
+dsh-cohub-goal-ledger.zh.md: 1a990f8fe5dcb6717c6f89b57a9adeeae11b68b9

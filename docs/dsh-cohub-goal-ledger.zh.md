@@ -125,3 +125,15 @@ Host 侧十一项测试和浏览器侧四项测试通过。受影响的插件通
 九百四十九组双语文档配对全部一致，没有残留补丁文件。隔离分支提交之外只保留三份原有研究记录。
 
 原日常工作树仍位于 `master`，提交为 `47f943859bef60e4160492346772ded9b24f765a`，原有四十八项未提交现场数量保持不变。没有触碰 Cohub 代码、活跃 profile、合并、推送、发布或 release。Goal 已在本地分支 `cohub/dsh-plugin-ecosystem` 完成。
+
+## 2026-08-16 · 隔离部署 Cohub Space 预览版
+
+已经完成的插件家族现从隔离工作树 `/workspace/dsh-cohub-plugins` 的 `cohub/dsh-plugin-ecosystem` 分支运行。预览版使用独立 Harness home `/workspace/.dsh-cohub-preview/home`、DSH 端口 `3081` 和外部代理端口 `5173`。日常使用版本继续占用 `3080` 与 `3000`。
+
+Space 内可见的 Work 为 <https://cohub.run/atou/deepseek-harness/w/deepseek-harness-cohub-preview>，Work ID 是 `51655281-6e4a-4d41-95af-ab64c92b0165`。该组合把 Cohub Account、Space 云文件夹、只读 Board 界面、Cohub LLM Provider 与可恢复的多媒体生成能力作为独立包加载。原 Work `a0aa437e-0c4a-4b50-ab4d-c49f62f32a43` 仍指向 `3000` 端口，其版本和可见范围均未变化。
+
+共享浏览器已打开真实 Work 外壳与端口 iframe，控制台没有错误。插件列表显示八个 Cohub Host 与浏览器条目全部启用。账号浮层、Board 浮层和带标识的远程来源都能正常显示。匿名访问会明确报出 `Cohub authentication is required`；没有执行真实登录，也没有发起会计费的模型或生成请求。
+
+机械交付脚本在等待实时 Harness 连接进入 `networkidle` 时超时，但两个公开 HTTP 探测都返回 `200`。该失败记录得到共享浏览器中的 Work 与 iframe 证据、可见截图、干净控制台、实时插件列表和进程隔离检查补充。两项 Loader 回归测试、定向静态检查、工作区约束以及全部七十八项 DSH-Cohub 验收均通过。
+
+原工作树仍位于 `master`，提交为 `47f943859bef60e4160492346772ded9b24f765a`，原有四十八项未提交现场数量保持不变。没有修改 Cohub 源码，没有合并或推送；预览部署文件只存在于隔离 DSH 分支。

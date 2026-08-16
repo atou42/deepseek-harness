@@ -125,3 +125,15 @@ The complete isolated branch passes 78 DSH-Cohub acceptance checks. The account 
 All 949 bilingual documentation pairs are consistent. No patch residue remains. The isolated branch contains only the three pre-existing untracked research records outside its commits.
 
 The original daily-use worktree remains on `master` at `47f943859bef60e4160492346772ded9b24f765a` with the same 48 pre-existing status entries. No Cohub code, active profile, merge, push, publication, or release was touched. The goal is complete on local branch `cohub/dsh-plugin-ecosystem`.
+
+## 2026-08-16 · Isolated Cohub Space preview deployment
+
+The completed plugin family is now running from the isolated `/workspace/dsh-cohub-plugins` worktree on branch `cohub/dsh-plugin-ecosystem`. The preview uses its own Harness home at `/workspace/.dsh-cohub-preview/home`, DSH port `3081`, and external proxy port `5173`. The daily-use instance remains on ports `3080` and `3000`.
+
+The Space-visible Work is <https://cohub.run/atou/deepseek-harness/w/deepseek-harness-cohub-preview>, Work ID `51655281-6e4a-4d41-95af-ab64c92b0165`. Its composition loads Cohub Account, Space cloud folders, the read-only Board surface, the Cohub LLM provider, and recoverable multimedia generation as separate packages. The original Work `a0aa437e-0c4a-4b50-ab4d-c49f62f32a43` still targets port `3000`; no original Work version or visibility changed.
+
+Shared-browser verification opened the real Work wrapper and its port-backed iframe with no console errors. The plugin inventory reports all eight Cohub Host and browser rows enabled. The account overlay, Board overlay, and marked remote source render correctly. Anonymous access fails explicitly with `Cohub authentication is required`; no real login or billable model or generation request was performed.
+
+The mechanical delivery script timed out while waiting for `networkidle` on the live Harness connection, even though both public HTTP probes returned `200`. The retained failure is supplemented by the shared-browser Work and iframe evidence, visible screenshots, clean console, live plugin inventory, and distinct-process checks. The two loader regression tests, scoped lint, workspace constraints, and all 78 DSH-Cohub acceptance checks pass.
+
+The original worktree remains on `master` at `47f943859bef60e4160492346772ded9b24f765a` with the same 48 pre-existing status entries. No Cohub source code was changed, nothing was merged or pushed, and the preview deployment files exist only on the isolated DSH branch.

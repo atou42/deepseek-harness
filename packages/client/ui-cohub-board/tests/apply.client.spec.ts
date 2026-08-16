@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply, inject } from '../src/client/index.ts'
+import { apply as applyLoader } from '../src/index.ts'
 import { BoardFooterAction } from '../src/client/BoardFooterAction.tsx'
 import { BoardOverlay } from '../src/client/BoardOverlay.tsx'
 import type { CohubBoardOverlayController } from '../src/client/controller.ts'
@@ -22,6 +23,8 @@ async function bench() {
 
 describe('ui-cohub-board apply', () => {
   it('registers independent footer and overlay seats and removes both on unload', async () => {
+    expect(applyLoader).toBeTypeOf('function')
+    applyLoader()
     expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.cohubSpaces', 'remote.cohubBoard'])
     const b = await bench()
     const fiber = b.ctx.plugin({ inject: ['slots', 'locale'], apply })
