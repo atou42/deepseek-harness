@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-08-16-remote-roots-and-cohub-plugin-boundaries.md
-2026-08-16-remote-roots-and-cohub-plugin-boundaries.md: aebb80076175add5452ec58f1fc0c7125baaa586
-2026-08-16-remote-roots-and-cohub-plugin-boundaries.zh.md: 71cf8488f9e099e3ba949ff35bf9e989469ae1ba
+2026-08-16-remote-roots-and-cohub-plugin-boundaries.md: 752ece9957ae1557c15004006317ff7522ec2d64
+2026-08-16-remote-roots-and-cohub-plugin-boundaries.zh.md: 000cc0c77f2348dafb8e183e802f3fddb9e6ccea

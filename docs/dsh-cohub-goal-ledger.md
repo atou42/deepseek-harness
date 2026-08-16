@@ -32,4 +32,12 @@ A real Slot runtime composition mounts the Workspace browser, remote-root UI, an
 
 The dependency lock was refreshed offline with install scripts disabled. No native hook, network fetch, profile installation, runtime enablement, or main-worktree write occurred. The existing Web replay blocker remains unchanged and is not counted as evidence for this slice.
 
-Next action: harden provider response validation, then introduce the single host-side Cohub Account capability and the separately unloadable Cohub Space/files adapter.
+## 2026-08-16 · Provider response boundary hardened
+
+The remote-root registry now treats every Provider return as untrusted runtime data. It validates request identities before dispatch, verifies that list/read/write identities match the request, rejects duplicate or structurally invalid directory entries, and admits only valid text responses and explicit version-conflict write outcomes. Published roots, listings, files, and nested metadata are copied and deeply frozen, so later Provider mutation cannot change observed state.
+
+Eleven dedicated registry tests pass, including identity mismatches, invalid marker and capability metadata, duplicate and invalid entries, malformed reads and writes, explicit conflicts, cloning, and deep freezing. The combined DSH-Cohub verifier passes 24 checks. Scoped lint, package type-check, and the client bundle also pass.
+
+No Cohub identity, token, local path, Workspace mutation, Shell behavior, profile installation, or main-worktree write was introduced.
+
+Next action: introduce the single host-side Cohub Account capability, then the separately unloadable Cohub Space/files adapter.

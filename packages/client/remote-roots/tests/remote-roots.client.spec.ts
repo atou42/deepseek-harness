@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   RemoteResourceId, RemoteRootSource, RemoteRootSourceId, RemoteRootSourceSnapshot,
+  RemoteTextFile, RemoteTextWriteResult,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 import { RemoteRootsService } from '../src/client/service.ts'
 
@@ -53,6 +54,60 @@ describe('RemoteRootsService', () => {
     expect(JSON.stringify(service.snapshot.getSnapshot())).not.toContain('path')
   })
 
+  it('clones and deeply freezes provider snapshots', async () => {
+    const { service } = await bench()
+    const root = {
+      id: resourceId('space:one'),
+      title: 'Cloud Space',
+      marker: { kind: 'cloud' as const, label: 'Cloud' },
+      capabilities: { browse: true as const, read: true, write: false },
+    }
+    const sourceSnapshot: RemoteRootSourceSnapshot = { status: 'ready', roots: [root] }
+    service.register({
+      id: sourceId('mutable.remote'),
+      snapshot: { getSnapshot: () => sourceSnapshot, subscribe: () => () => {} },
+      list: async ({ rootId, parentId }) => ({ rootId, parentId, entries: [] }),
+    })
+    const published = service.snapshot.getSnapshot()
+    root.title = 'Mutated'
+    root.marker.label = 'Mutated'
+    expect(published.sources[0]?.roots[0]?.title).toBe('Cloud Space')
+    expect(published.sources[0]?.roots[0]?.marker.label).toBe('Cloud')
+    expect(Object.isFrozen(published.sources[0]?.roots[0]?.marker)).toBe(true)
+    expect(Object.isFrozen(published.sources[0]?.roots[0]?.capabilities)).toBe(true)
+    expect(Object.isFrozen(published.sources[0]?.roots)).toBe(true)
+  })
+
+  it('rejects invalid marker and capability metadata', async () => {
+    const { service } = await bench()
+    const fixture = provider()
+    service.register(fixture.source)
+    expect(() => {
+      fixture.snapshot.set({
+        status: 'ready',
+        roots: [{
+          id: resourceId('space:one'),
+          title: 'Cloud Space',
+          marker: { kind: 'other', label: 'Cloud' },
+          capabilities: { browse: true, read: true, write: false },
+        }],
+      } as unknown as RemoteRootSourceSnapshot)
+    }).toThrow(/invalid marker kind/)
+    expect(() => service.snapshot.getSnapshot()).toThrow(/invalid marker kind/)
+    fixture.snapshot.set({ status: 'loading', roots: [] })
+    expect(() => {
+      fixture.snapshot.set({
+        status: 'ready',
+        roots: [{
+          id: resourceId('space:one'),
+          title: 'Cloud Space',
+          marker: { kind: 'cloud', label: 'Cloud' },
+          capabilities: { browse: true, read: 'yes', write: false },
+        }],
+      } as unknown as RemoteRootSourceSnapshot)
+    }).toThrow(/capability read must be a boolean/)
+  })
+
   it('rejects duplicate source ids and frees the id on disposal', async () => {
     const { service } = await bench()
     const first = provider()
@@ -96,6 +151,130 @@ describe('RemoteRootsService', () => {
     })
   })
 
+  it('validates, clones, and freezes directory listings', async () => {
+    const { service } = await bench()
+    const fixture = provider()
+    const entry = {
+      id: resourceId('file:one'),
+      parentId: resourceId('folder:two'),
+      name: 'one.txt',
+      kind: 'file' as const,
+      revision: 'r1',
+      size: 3,
+    }
+    fixture.list.mockResolvedValueOnce({
+      rootId: resourceId('space:one'),
+      parentId: resourceId('folder:two'),
+      entries: [entry],
+    })
+    service.register(fixture.source)
+    const listing = await service.list(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), parentId: resourceId('folder:two'),
+    })
+    entry.name = 'mutated.txt'
+    expect(listing.entries[0]?.name).toBe('one.txt')
+    expect(Object.isFrozen(listing)).toBe(true)
+    expect(Object.isFrozen(listing.entries[0])).toBe(true)
+
+    fixture.list.mockResolvedValueOnce({
+      rootId: resourceId('wrong'), parentId: resourceId('folder:two'), entries: [],
+    })
+    await expect(service.list(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), parentId: resourceId('folder:two'),
+    })).rejects.toThrow(/rootId does not match/)
+
+    fixture.list.mockResolvedValueOnce({
+      rootId: resourceId('space:one'),
+      parentId: resourceId('folder:two'),
+      entries: [entry, { ...entry }],
+    })
+    await expect(service.list(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), parentId: resourceId('folder:two'),
+    })).rejects.toThrow(/duplicate entry/)
+
+    fixture.list.mockResolvedValueOnce({
+      rootId: resourceId('space:one'),
+      parentId: resourceId('folder:two'),
+      entries: [{ ...entry, size: -1 }],
+    })
+    await expect(service.list(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), parentId: resourceId('folder:two'),
+    })).rejects.toThrow(/size must be a non-negative safe integer/)
+  })
+
+  it('validates and isolates read and write results', async () => {
+    const { service } = await bench()
+    const fixture = provider()
+    const file: RemoteTextFile = {
+      rootId: resourceId('space:one'),
+      fileId: resourceId('file:one'),
+      content: 'hello',
+      revision: 'r1',
+    }
+    const read = vi.fn(async () => file)
+    let writeResult: RemoteTextWriteResult = { ok: true, value: file }
+    const write = vi.fn(async () => writeResult)
+    service.register({ ...fixture.source, read, write })
+
+    const readValue = await service.read(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), fileId: resourceId('file:one'),
+    })
+    ;(file as { content: string }).content = 'mutated'
+    expect(readValue.content).toBe('hello')
+    expect(Object.isFrozen(readValue)).toBe(true)
+
+    writeResult = {
+      ok: false,
+      error: {
+        code: 'version-conflict',
+        current: { ...file, content: 'current', revision: 'r2' },
+      },
+    }
+    const conflict = await service.write(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'),
+      fileId: resourceId('file:one'),
+      content: 'next',
+      ifRevision: 'r1',
+    })
+    expect(conflict).toEqual({
+      ok: false,
+      error: { code: 'version-conflict', current: { ...file, content: 'current', revision: 'r2' } },
+    })
+    expect(Object.isFrozen(conflict)).toBe(true)
+    expect(Object.isFrozen(conflict.ok ? conflict.value : conflict.error.current)).toBe(true)
+
+    read.mockResolvedValueOnce({ ...file, fileId: resourceId('wrong') })
+    await expect(service.read(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), fileId: resourceId('file:one'),
+    })).rejects.toThrow(/fileId does not match/)
+
+    writeResult = { ok: true, value: { ...file, revision: '' } }
+    await expect(service.write(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'),
+      fileId: resourceId('file:one'),
+      content: 'next',
+      ifRevision: 'r1',
+    })).rejects.toThrow(/revision must be a non-blank string/)
+
+    writeResult = { ok: false, error: { code: 'unsupported', current: file } } as unknown as RemoteTextWriteResult
+    await expect(service.write(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'),
+      fileId: resourceId('file:one'),
+      content: 'next',
+      ifRevision: 'r1',
+    })).rejects.toThrow(/unsupported error code/)
+  })
+
+  it('rejects malformed requests before calling a provider', async () => {
+    const { service } = await bench()
+    const fixture = provider()
+    service.register(fixture.source)
+    await expect(service.list(sourceId('fixture.remote'), {
+      rootId: resourceId(''), parentId: resourceId('folder'),
+    })).rejects.toThrow(/request rootId must be a non-blank string/)
+    expect(fixture.list).not.toHaveBeenCalled()
+  })
+
   it('fails loudly for an unknown source or unsupported file operation', async () => {
     const { service } = await bench()
     await expect(service.list(sourceId('missing'), {
@@ -111,13 +290,15 @@ describe('RemoteRootsService', () => {
     const { service } = await bench()
     const fixture = provider()
     service.register(fixture.source)
-    expect(() => fixture.snapshot.set({
-      status: 'ready',
-      roots: [
-        { id: resourceId('same'), title: 'A', marker: { kind: 'cloud', label: 'Cloud' }, capabilities: { browse: true, read: false, write: false } },
-        { id: resourceId('same'), title: 'B', marker: { kind: 'cloud', label: 'Cloud' }, capabilities: { browse: true, read: false, write: false } },
-      ],
-    })).toThrow(/duplicate root/)
+    expect(() => {
+      fixture.snapshot.set({
+        status: 'ready',
+        roots: [
+          { id: resourceId('same'), title: 'A', marker: { kind: 'cloud', label: 'Cloud' }, capabilities: { browse: true, read: false, write: false } },
+          { id: resourceId('same'), title: 'B', marker: { kind: 'cloud', label: 'Cloud' }, capabilities: { browse: true, read: false, write: false } },
+        ],
+      })
+    }).toThrow(/duplicate root/)
     expect(() => service.snapshot.getSnapshot()).toThrow(/duplicate root/)
     fixture.snapshot.set({ status: 'loading', roots: [] })
     expect(service.snapshot.getSnapshot().sources[0]?.status).toBe('loading')
