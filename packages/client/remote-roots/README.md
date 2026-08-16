@@ -6,7 +6,7 @@ Generic browser-side capability seam for remote roots. A provider registers an o
 
 ## Model Experience
 
-None. The registry is presentation-side data access and never injects model-visible context.
+None, as the registry is presentation-side data access and never injects model-visible context.
 
 #### KV Cache effect
 
@@ -14,4 +14,4 @@ None.
 
 ## Known Limitations and Deferred Work
 
-No presentation plugin is included in this package. Board documents and generated assets use separate generic capability seams rather than widening the filesystem-like contract.
+- No presentation plugin is included in this package. Board documents and generated assets use separate generic capability seams rather than widening the filesystem-like contract.

@@ -40,4 +40,16 @@ Eleven dedicated registry tests pass, including identity mismatches, invalid mar
 
 No Cohub identity, token, local path, Workspace mutation, Shell behavior, profile installation, or main-worktree write was introduced.
 
-Next action: introduce the single host-side Cohub Account capability, then the separately unloadable Cohub Space/files adapter.
+## 2026-08-16 · Single Host-side Cohub Account established
+
+The new MIT package `@deepseek-ai/dsh-cohub-account` is the sole owner of Cohub device login, private session persistence, refresh, and logout. The private device code and access/refresh tokens never enter its public snapshot. Cohub adapters receive a token only through `getAccessToken()`. The implementation uses platform HTTP APIs rather than adding the Apache-2.0 Cohub CLI or SDK as a dependency.
+
+The service rejects corrupt persisted sessions without clearing the evidence, single-flights concurrent refresh, clears credentials on unrecoverable authorization rejection, preserves the stored session on transient refresh failure, and clears local state before reporting a remote revocation warning. Generation fencing and lifecycle cancellation prevent late login, profile, or refresh results from restoring a logged-out or unloaded account. A successful token exchange survives a transient profile request in private memory, so retry never reuses the one-time device code.
+
+Ten focused service tests and one real Loader composition test pass with mocked external HTTP. The Loader test signs in through a test-only `cordis.yml`, persists through the real credentials provider under a temporary Harness home, restarts, and restores the token-free account state. Host aggregate type-check, package bundle, workspace constraints, scoped lint, and the combined 35-check DSH-Cohub verifier pass.
+
+One early type-check command used `pnpm exec` before the new workspace importer was wired. Pnpm reconciled the intended lockfile entry and ran the repository's existing subprocess helper and worktree-local Lefthook postinstalls. It downloaded zero packages, changed no tracked file beyond the intended lock importer, and did not touch the active profile or main worktree. Subsequent checks use direct repository binaries. This execution crossed the prior ignore-scripts discipline and is recorded here rather than hidden or counted as validation.
+
+No real Cohub credential or endpoint was used, and nothing was enabled, published, pushed, or merged.
+
+Next action: implement the separately unloadable Cohub Space/files adapter over the Account service and the generic remote-root seam.

@@ -8,8 +8,12 @@ Providers register data and operations through `@deepseek-ai/dsh-client-remote-r
 
 ## Model Experience
 
-None. This package is browser presentation and sends no model input.
+None, as this package is browser presentation and sends no model input.
 
 #### KV Cache effect
 
 None; it neither assembles nor sends a provider request.
+
+## Known Limitations and Deferred Work
+
+- The tree is deliberately browse-only. Editing and provider-specific actions remain outside this anonymous presentation package.

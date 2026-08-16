@@ -1,6 +1,6 @@
 # Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write docs/dsh-cohub-goal-ledger.md
-dsh-cohub-goal-ledger.md: 82206e81c535c8ca929a47d2935d0718cccc4ef2
-dsh-cohub-goal-ledger.zh.md: a5fb4eb9ee495ba29cdeb0e42db798b6a475d758
+#   pnpm run verify-translation-pairing --write packages/identity/cohub-account/README.md
+README.md: 0952de2ee832880d89d245badd2d0336bbf994cb
+README.zh.md: cb8fc74ed55ae629e25a72773b0d1001788740fb

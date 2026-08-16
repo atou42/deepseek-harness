@@ -6,7 +6,7 @@ const PACKAGE_NAME = '@deepseek-ai/dsh-client-remote-roots'
 export const name = 'client-remote-roots-invariant'
 export const inject = ['invariants']
 
-/** Registry correctness is enforced at registration and covered by disposal tests. */
+/** No runtime invariant: registration validation and disposal tests enforce registry correctness. */
 const install: InvariantInstaller = () => {}
 
 export const apply = (ctx: Context): Promise<() => void> =>
