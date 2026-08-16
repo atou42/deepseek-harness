@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 const targets = [
   'packages/identity/cohub-account/tests',
   'packages/host/cohub-spaces/tests',
+  'packages/llm/llm-cohub/tests',
   'packages/client/remote-roots/tests',
   'packages/client/cohub-spaces/tests',
   'packages/client/ui-remote-roots/tests',

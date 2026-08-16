@@ -65,3 +65,15 @@ Five Host adapter tests, six browser provider tests, and the four affected gener
 No real Cohub credential or endpoint was used. Nothing was enabled in the active profile, merged, pushed, published, or written into the original daily-use worktree.
 
 Next action: implement the independently unloadable Cohub generative-model adapter over the same Account owner, without coupling it to Space/files or generic UI packages.
+
+## 2026-08-16 · Cohub model catalog and raw completion adapter
+
+The independently unloadable `@deepseek-ai/dsh-llm-cohub` package exposes a single DSH provider route named `cohub`. It reads the authenticated Cohub catalog, represents each provider-and-model pair with a collision-free opaque DSH model id, and submits tool-free requests to the formal Space-scoped raw-completion API. The explicit `spaceId` controls Cohub authorization, attribution, archiving, and billing without coupling the package to the Space/files adapter or browser UI.
+
+The adapter obtains bearer tokens only from the Cohub Account service. Catalog data, model capabilities, image attachments, requests, server-sent events, final aggregates, usage, failures, truncation, cancellation, and plugin unload are all validated at the boundary. It performs no automatic retry because the billable completion endpoint offers no caller idempotency key. Optional user images are enabled only when DSH's durable attachment service is present.
+
+Cohub's current raw-completion contract does not accept tool schemas or stop sequences and does not preserve tool-call history. Requests containing DSH tools, tool calls, tool results, stop sequences, or assistant-side images therefore fail before network I/O. Replacing raw completion with Cohub Sessions was rejected because that would hand execution to Cohub's agent runtime and break the DSH-provider boundary.
+
+Ten focused adapter tests pass. Scoped lint, package type-check, package build, Host aggregate type-check, workspace constraints, bilingual README pairing, Model Experience and limitation documentation gates, and the combined 56-check DSH-Cohub verifier also pass. No real credential or endpoint was used. No Cohub code, active profile, main worktree, merge, push, publication, or release was touched.
+
+Next action: implement the separately unloadable Cohub multimedia-generation adapter, then add the Board surface as its own optional package.
