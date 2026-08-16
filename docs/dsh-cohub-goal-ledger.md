@@ -115,3 +115,13 @@ The plugin-family guide records independent compositions for provider-neutral fo
 No real Cohub credential or endpoint was used. No Cohub code, active profile, original worktree, merge, push, publication, or release was touched.
 
 Next action: run final adversarial acceptance and close the goal only if the original worktree remains unchanged.
+
+## 2026-08-16 · Final adversarial acceptance
+
+Final verdict: PASS.
+
+The complete isolated branch passes 78 DSH-Cohub acceptance checks. The account boundary passes fifteen real Host and browser tests, including corrupt persisted state, terminal and transport failures, unsafe verification URLs, logout, unload, and restart restoration. The generated browser Remote contract exposes only token-free account operations, and the built browser artifact contains no access token, refresh token, private device code, bearer header, or authorization header.
+
+All 949 bilingual documentation pairs are consistent. No patch residue remains. The isolated branch contains only the three pre-existing untracked research records outside its commits.
+
+The original daily-use worktree remains on `master` at `47f943859bef60e4160492346772ded9b24f765a` with the same 48 pre-existing status entries. No Cohub code, active profile, merge, push, publication, or release was touched. The goal is complete on local branch `cohub/dsh-plugin-ecosystem`.
