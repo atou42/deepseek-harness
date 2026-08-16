@@ -26,6 +26,9 @@
       "path": "../../credentials/credentials"
     },
     {
+      "path": "../../host/cohub-spaces"
+    },
+    {
       "path": "../../interaction/commands"
     },
     {

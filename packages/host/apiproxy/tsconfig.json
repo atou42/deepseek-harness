@@ -96,6 +96,9 @@
       "path": "../../extensions/cordis-host-runner"
     },
     {
+      "path": "../cohub-spaces"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {

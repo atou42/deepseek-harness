@@ -49,7 +49,7 @@ export interface RemoteResourceEntry {
   readonly id: RemoteResourceId
   readonly parentId: RemoteResourceId
   readonly name: string
-  readonly kind: 'folder' | 'file'
+  readonly kind: 'folder' | 'file' | 'link'
   readonly revision?: string
   readonly size?: number
 }

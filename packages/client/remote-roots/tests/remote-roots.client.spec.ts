@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  RemoteResourceId, RemoteRootSource, RemoteRootSourceId, RemoteRootSourceSnapshot,
+  RemoteDirectoryListing, RemoteResourceId, RemoteRootSource, RemoteRootSourceId, RemoteRootSourceSnapshot,
   RemoteTextFile, RemoteTextWriteResult,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 import { RemoteRootsService } from '../src/client/service.ts'
@@ -18,7 +18,10 @@ async function bench() {
 
 function provider(id = 'fixture.remote') {
   const snapshot = createSnapshotStore<RemoteRootSourceSnapshot>({ status: 'loading', roots: [] })
-  const list = vi.fn(async ({ rootId, parentId }: { rootId: RemoteResourceId; parentId: RemoteResourceId }) => ({
+  const list = vi.fn(async ({ rootId, parentId }: {
+    rootId: RemoteResourceId
+    parentId: RemoteResourceId
+  }): Promise<RemoteDirectoryListing> => ({
     rootId,
     parentId,
     entries: [],

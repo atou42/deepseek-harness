@@ -42,6 +42,7 @@ describe('RemoteRootTree', () => {
       entries: [
         { id: rid('folder:characters'), parentId, name: '角色', kind: 'folder' as const },
         { id: rid('file:bible'), parentId, name: '世界设定.md', kind: 'file' as const, revision: 'r1' },
+        { id: rid('link:latest'), parentId, name: '最新设定', kind: 'link' as const, revision: 'r2' },
       ],
     }))
     const view = render(
@@ -62,6 +63,9 @@ describe('RemoteRootTree', () => {
     expect(view.getByRole('treeitem', { name: '文件 世界设定.md' }).getAttribute(
       'data-remote-resource-id',
     )).toBe('file:bible')
+    expect(view.getByRole('treeitem', { name: '链接 最新设定' }).getAttribute(
+      'data-remote-resource-id',
+    )).toBe('link:latest')
   })
 
   it('surfaces a listing failure and retries the same remote folder', async () => {

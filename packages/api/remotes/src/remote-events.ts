@@ -17,6 +17,7 @@
 export const API_REMOTE_FORWARDED_EVENTS = [
   'agent-preset/selected',
   'commands/change',
+  'cohub-spaces/changed',
   'credentials/updated',
   'cordis/request-run',
   'cordis/request-run-resolved',

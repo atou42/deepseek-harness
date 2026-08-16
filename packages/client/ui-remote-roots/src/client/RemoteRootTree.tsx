@@ -19,12 +19,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function FileRow({ entry, depth, t }: { entry: RemoteResourceEntry; depth: number; t: Translate }) {
+function LeafRow({ entry, depth, t }: { entry: RemoteResourceEntry; depth: number; t: Translate }) {
   return (
     <div
       className={css.row}
       role="treeitem"
-      aria-label={t('file', { name: entry.name })}
+      aria-label={t(entry.kind === 'link' ? 'link' : 'file', { name: entry.name })}
       style={{ paddingInlineStart: `${8 + depth * 16}px` }}
       data-remote-resource-id={entry.id}
     >
@@ -135,7 +135,7 @@ function Folder({ sourceId, rootId, id, name, marker, depth, list, t }: FolderPr
                 t={t}
               />
             )
-            : <FileRow key={entry.id} entry={entry} depth={depth + 1} t={t} />)}
+            : <LeafRow key={entry.id} entry={entry} depth={depth + 1} t={t} />)}
         </div>
       )}
     </div>

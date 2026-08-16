@@ -98,7 +98,7 @@ function validateListing(value: unknown, request: {
     if (ids.has(id)) throw new TypeError(`remote-roots: list result contains duplicate entry "${id}"`)
     ids.add(id)
     if (entry.parentId !== request.parentId) throw new TypeError(`remote-roots: list entry "${id}" parentId does not match request`)
-    if (entry.kind !== 'folder' && entry.kind !== 'file') throw new TypeError(`remote-roots: list entry "${id}" has invalid kind`)
+    if (entry.kind !== 'folder' && entry.kind !== 'file' && entry.kind !== 'link') throw new TypeError(`remote-roots: list entry "${id}" has invalid kind`)
     if (entry.revision !== undefined) nonBlank(entry.revision, `list entry "${id}" revision`)
     if (entry.size !== undefined && (!Number.isSafeInteger(entry.size) || (entry.size as number) < 0)) {
       throw new TypeError(`remote-roots: list entry "${id}" size must be a non-negative safe integer`)

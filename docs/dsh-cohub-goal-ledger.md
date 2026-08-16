@@ -53,3 +53,15 @@ One early type-check command used `pnpm exec` before the new workspace importer 
 No real Cohub credential or endpoint was used, and nothing was enabled, published, pushed, or merged.
 
 Next action: implement the separately unloadable Cohub Space/files adapter over the Account service and the generic remote-root seam.
+
+## 2026-08-16 · Cohub Spaces presented as marked cloud folders
+
+The independently unloadable `@deepseek-ai/dsh-cohub-spaces` Host adapter now lists accessible Spaces, browses exact Space-relative directories, reads inline UTF-8 text, and performs compare-and-set text writes through Cohub's platform HTTP API. It obtains access tokens only from `ctx.cohubAccount`; credentials never cross the typed Remote boundary. Every response is validated. Malformed, preparing, binary, forbidden, and transport failures remain explicit, while stale writes return the current remote text and revision instead of overwriting it.
+
+The browser-only `@deepseek-ai/dsh-client-cohub-spaces` provider registers each Space as a folder-like generic remote root marked `Cohub`. Provider-owned opaque identities preserve folders, files, and links without inventing local paths. Account changes refresh the source; generation fences, abort handling, and disposal prevent late results from restoring unloaded state. Carrier failures become visible provider errors rather than empty trees.
+
+Five Host adapter tests, six browser provider tests, and the four affected generic-tree UI tests pass. Both new packages type-check, scoped lint passes, the Host Remote artifact and browser bundle build, and the generated browser artifact contains no credential state. No local Workspace, cwd, Shell target, sync loop, delete/move/upload operation, remote execution, or Work publication was introduced.
+
+No real Cohub credential or endpoint was used. Nothing was enabled in the active profile, merged, pushed, published, or written into the original daily-use worktree.
+
+Next action: implement the independently unloadable Cohub generative-model adapter over the same Account owner, without coupling it to Space/files or generic UI packages.
