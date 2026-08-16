@@ -152,6 +152,9 @@ export function RemoteRootTree({ useRemoteRoots, list, t }: RemoteRootTreeProps)
         {sources.map(source => (
           <div key={source.sourceId} role="none" data-remote-source={source.sourceId}>
             {source.status === 'loading' && <div className={css.status} role="status">{t('source.loading')}</div>}
+            {source.status === 'authentication-required' && (
+              <div className={css.status} role="status">{t('source.authenticationRequired', { provider: source.provider ?? '' })}</div>
+            )}
             {source.status === 'error' && (
               <div className={css.error} role="alert">{t('source.error', { message: source.message ?? '' })}</div>
             )}

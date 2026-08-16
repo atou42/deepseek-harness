@@ -30,6 +30,7 @@ export interface RemoteRootView {
 /** Provider publication consumed by the aggregate registry snapshot. */
 export type RemoteRootSourceSnapshot =
   | { readonly status: 'loading'; readonly roots: readonly [] }
+  | { readonly status: 'authentication-required'; readonly roots: readonly []; readonly provider: string }
   | { readonly status: 'ready'; readonly roots: readonly RemoteRootView[] }
   | { readonly status: 'error'; readonly roots: readonly []; readonly message: string }
 
@@ -41,6 +42,7 @@ export interface RemoteRootsSnapshot {
     readonly status: RemoteRootSourceSnapshot['status']
     readonly roots: readonly RemoteRootView[]
     readonly message?: string
+    readonly provider?: string
   }[]
 }
 

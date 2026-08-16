@@ -137,3 +137,13 @@ Shared-browser verification opened the real Work wrapper and its port-backed ifr
 The mechanical delivery script timed out while waiting for `networkidle` on the live Harness connection, even though both public HTTP probes returned `200`. The retained failure is supplemented by the shared-browser Work and iframe evidence, visible screenshots, clean console, live plugin inventory, and distinct-process checks. The two loader regression tests, scoped lint, workspace constraints, and all 78 DSH-Cohub acceptance checks pass.
 
 The original worktree remains on `master` at `47f943859bef60e4160492346772ded9b24f765a` with the same 48 pre-existing status entries. No Cohub source code was changed, nothing was merged or pushed, and the preview deployment files exist only on the isolated DSH branch.
+
+## 2026-08-16 · Authentication-required remote source state
+
+The anonymous preview initially rendered the expected lack of Cohub identity as a raw remote-source failure: `cohubSpaces.listSpaces failed: internal: Cohub authentication is required`. The browser provider called the Space API before checking the token-free account snapshot, while the generic remote-root contract had no non-error state for a source waiting on authentication.
+
+The generic seam now validates and publishes a provider-labelled `authentication-required` state. Its tree renders `Sign in to Cohub to view cloud folders` as ordinary status text rather than an alert. The Cohub Spaces provider reads `cohubAccount.getAccount` before any Space I/O, avoids the Space call while anonymous or mid-login, and refreshes through the existing account-change event after authentication. Account-carrier and Space transport failures remain explicit errors.
+
+Three regression suites first failed at the registry, presentation, and Cohub provider boundaries, then passed with 23 tests after the implementation. A dedicated test also proves anonymous-to-authenticated event refresh and a separate failure test proves account transport errors stay visible. Client aggregate type-check, scoped lint, workspace constraints, browser build, and the combined DSH-Cohub verifier pass.
+
+The isolated preview DSH process was restarted on port `3081` while its port `5173` proxy and the original `3080`/`3000` processes remained separate. Shared-browser verification of the real Work shows the sign-in status, no raw error, a working Cohub Account login button, and no console errors. No real login or billable request was performed. No Cohub code was changed and nothing was pushed.

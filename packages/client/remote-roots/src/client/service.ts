@@ -64,6 +64,13 @@ function validateSnapshot(sourceId: string, value: unknown): RemoteRootSourceSna
   if (snapshot.status === 'loading') {
     return Object.freeze({ status: 'loading', roots: emptyRoots(snapshot.roots, `loading source "${sourceId}"`) })
   }
+  if (snapshot.status === 'authentication-required') {
+    return Object.freeze({
+      status: 'authentication-required',
+      roots: emptyRoots(snapshot.roots, `authentication-required source "${sourceId}"`),
+      provider: nonBlank(snapshot.provider, `source "${sourceId}" authentication provider`),
+    })
+  }
   if (snapshot.status === 'error') {
     return Object.freeze({
       status: 'error',
@@ -255,6 +262,7 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
           sourceId: source.id,
           status: current.status,
           roots: current.roots,
+          ...(current.status === 'authentication-required' ? { provider: current.provider } : {}),
           ...(current.status === 'error' ? { message: current.message } : {}),
         })
       })

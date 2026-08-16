@@ -11,6 +11,10 @@ import {
 
 function remote(overrides: Partial<CohubSpacesRemoteApi> = {}): CohubSpacesRemoteApi {
   return {
+    getAccount: vi.fn(async () => ({
+      revision: 1, status: 'authenticated' as const,
+      profile: { userId: 'user-1' }, accessTokenExpiresAt: Date.now() + 60_000,
+    })),
     listSpaces: vi.fn(async () => []),
     listDirectory: vi.fn(async (spaceId: string, path: string) => ({ spaceId, path, entries: [] })),
     readText: vi.fn(async (spaceId: string, path: string) => ({ spaceId, path, content: '', revision: '1:0' })),
@@ -153,10 +157,25 @@ describe('CohubSpacesRemoteRootSource', () => {
     })
 
     const late = source.refresh()
+    await Promise.resolve()
     source.dispose()
     resolveLate([{ id: 'space-late', title: 'Late' }])
     await late
     expect(source.snapshot.getSnapshot()).toEqual({ status: 'loading', roots: [] })
+  })
+
+  it('keeps account transport failures visible without calling the Space API', async () => {
+    const listSpaces = vi.fn(async () => [])
+    const source = new CohubSpacesRemoteRootSource(remote({
+      getAccount: vi.fn(async () => { throw new Error('account carrier offline') }),
+      listSpaces,
+    }))
+    await source.refresh()
+    expect(source.snapshot.getSnapshot()).toEqual({
+      status: 'error', roots: [], message: 'account carrier offline',
+    })
+    expect(listSpaces).not.toHaveBeenCalled()
+    source.dispose()
   })
 
   it('rejects an aborted operation while safely observing its late Remote result', async () => {
@@ -178,7 +197,7 @@ describe('CohubSpacesRemoteRootSource', () => {
     source.dispose()
   })
 
-  it('publishes a carrier failure and unregisters cleanly on unload', async () => {
+  it('publishes authentication-required and avoids Space I/O while anonymous', async () => {
     const unregister = vi.fn()
     const off = vi.fn()
     let registeredSource: CohubSpacesRemoteRootSource | undefined
@@ -186,18 +205,29 @@ describe('CohubSpacesRemoteRootSource', () => {
       registeredSource = source
       return unregister
     })
+    let changed!: () => void
+    const getAccount = vi.fn()
+      .mockResolvedValueOnce({ ok: true as const, value: { revision: 0, status: 'anonymous' as const } })
+      .mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          revision: 1, status: 'authenticated' as const, profile: { userId: 'user-1' },
+          accessTokenExpiresAt: Date.now() + 60_000,
+        },
+      })
+    const listSpaces = vi.fn(async () => ({
+      ok: true as const, value: [{ id: 'space-1', title: 'World' }],
+    }))
     const ctx = {
       remote: {
+        cohubAccount: { getAccount },
         cohubSpaces: {
-          listSpaces: vi.fn(async () => ({
-            ok: false as const,
-            error: { code: 'UNAUTHORIZED', message: 'sign in required', details: {} },
-          })),
+          listSpaces,
           listDirectory: vi.fn(),
           readText: vi.fn(),
           writeText: vi.fn(),
         },
-        $on: vi.fn(() => off),
+        $on: vi.fn((_event, listener: () => void) => { changed = listener; return off }),
       },
       remoteRoots: { register },
     } as unknown as ClientContext
@@ -206,9 +236,19 @@ describe('CohubSpacesRemoteRootSource', () => {
     await vi.waitFor(() => {
       if (registeredSource === undefined) throw new Error('source not registered')
       expect(registeredSource.snapshot.getSnapshot()).toEqual({
-        status: 'error', roots: [], message: 'cohubSpaces.listSpaces failed: UNAUTHORIZED: sign in required',
+        status: 'authentication-required', roots: [], provider: 'Cohub',
       })
     })
+    expect(listSpaces).not.toHaveBeenCalled()
+
+    changed()
+    await vi.waitFor(() => {
+      if (registeredSource === undefined) throw new Error('source not registered')
+      expect(registeredSource.snapshot.getSnapshot()).toMatchObject({
+        status: 'ready', roots: [{ id: 'space-1', title: 'World' }],
+      })
+    })
+    expect(listSpaces).toHaveBeenCalledOnce()
     dispose()
     expect(off).toHaveBeenCalledOnce()
     expect(unregister).toHaveBeenCalledOnce()

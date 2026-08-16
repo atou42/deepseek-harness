@@ -2,6 +2,7 @@
 
 import type { ClientContext, ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
+  CohubAccountSnapshot,
   CohubSpaceDirectory,
   CohubSpaceTextFile,
   CohubSpaceView,
@@ -22,6 +23,7 @@ import type {} from '@deepseek-ai/dsh-client-remote-roots/client'
 export const COHUB_SPACES_SOURCE_ID = 'cohub.spaces' as RemoteRootSourceId
 
 export interface CohubSpacesRemoteApi {
+  getAccount(): Promise<CohubAccountSnapshot>
   listSpaces(): Promise<readonly CohubSpaceView[]>
   listDirectory(spaceId: string, path: string): Promise<CohubSpaceDirectory>
   readText(spaceId: string, path: string): Promise<CohubSpaceTextFile>
@@ -44,9 +46,9 @@ function rejection(error: unknown, fallback: string): Error {
   return new Error(fallback, { cause: error })
 }
 
-function unwrapRemote<T>(method: string, answer: RemoteAnswer<T>): T {
+function unwrapRemote<T>(operation: string, answer: RemoteAnswer<T>): T {
   if (answer.ok) return answer.value
-  throw new Error(`cohubSpaces.${method} failed: ${answer.error.code}: ${answer.error.message}`)
+  throw new Error(`${operation} failed: ${answer.error.code}: ${answer.error.message}`)
 }
 
 function resourceId(spaceId: string, path: string): RemoteResourceId {
@@ -116,6 +118,14 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     const generation = ++this.generation
     this.publish(Object.freeze({ status: 'loading', roots: EMPTY_ROOTS }))
     try {
+      const account = await this.remote.getAccount()
+      if (generation !== this.generation) return
+      if (account.status !== 'authenticated') {
+        this.publish(Object.freeze({
+          status: 'authentication-required', roots: EMPTY_ROOTS, provider: 'Cohub',
+        }))
+        return
+      }
       const spaces = await this.remote.listSpaces()
       if (generation !== this.generation) return
       const ids = new Set<string>()
@@ -219,18 +229,21 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-export const inject = ['remote', 'remote.cohubSpaces', 'remoteRoots']
+export const inject = ['remote', 'remote.cohubAccount', 'remote.cohubSpaces', 'remoteRoots']
 
 /** Register the Cohub source and refresh it whenever the Host account changes. */
 export function apply(ctx: ClientContext): () => void {
   const carrier = ctx.remote.cohubSpaces
+  const accountCarrier = ctx.remote.cohubAccount
   const source = new CohubSpacesRemoteRootSource({
-    listSpaces: async () => unwrapRemote('listSpaces', await carrier.listSpaces()),
+    getAccount: async () => unwrapRemote('cohubAccount.getAccount', await accountCarrier.getAccount()),
+    listSpaces: async () => unwrapRemote('cohubSpaces.listSpaces', await carrier.listSpaces()),
     listDirectory: async (spaceId, path) =>
-      unwrapRemote('listDirectory', await carrier.listDirectory(spaceId, path)),
-    readText: async (spaceId, path) => unwrapRemote('readText', await carrier.readText(spaceId, path)),
+      unwrapRemote('cohubSpaces.listDirectory', await carrier.listDirectory(spaceId, path)),
+    readText: async (spaceId, path) =>
+      unwrapRemote('cohubSpaces.readText', await carrier.readText(spaceId, path)),
     writeText: async (spaceId, path, content, ifRevision) =>
-      unwrapRemote('writeText', await carrier.writeText(spaceId, path, content, ifRevision)),
+      unwrapRemote('cohubSpaces.writeText', await carrier.writeText(spaceId, path, content, ifRevision)),
   })
   const unregister = ctx.remoteRoots.register(source)
   let off: (() => void) | undefined

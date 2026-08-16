@@ -57,6 +57,23 @@ describe('RemoteRootsService', () => {
     expect(JSON.stringify(service.snapshot.getSnapshot())).not.toContain('path')
   })
 
+  it('publishes authentication-required without treating it as a provider failure', async () => {
+    const { service } = await bench()
+    const fixture = provider()
+    service.register(fixture.source)
+    fixture.snapshot.set({
+      status: 'authentication-required',
+      roots: [],
+      provider: 'Cohub',
+    } as unknown as RemoteRootSourceSnapshot)
+    expect(service.snapshot.getSnapshot().sources).toEqual([{
+      sourceId: sourceId('fixture.remote'),
+      status: 'authentication-required',
+      roots: [],
+      provider: 'Cohub',
+    }])
+  })
+
   it('clones and deeply freezes provider snapshots', async () => {
     const { service } = await bench()
     const root = {

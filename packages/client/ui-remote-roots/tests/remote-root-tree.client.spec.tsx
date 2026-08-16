@@ -121,6 +121,17 @@ describe('RemoteRootTree', () => {
     expect(view.getByRole('status').textContent).toContain('正在连接')
     source.set({
       revision: 2,
+      sources: [{
+        sourceId: sid('fixture.remote'), status: 'authentication-required',
+        roots: [], provider: 'Cohub',
+      }],
+    })
+    await waitFor(() => {
+      expect(view.getByRole('status').textContent).toContain('登录 Cohub')
+    })
+    expect(view.queryByRole('alert')).toBeNull()
+    source.set({
+      revision: 3,
       sources: [{ sourceId: sid('fixture.remote'), status: 'error', roots: [], message: '登录已失效' }],
     })
     await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('登录已失效') })

@@ -137,3 +137,13 @@ Space 内可见的 Work 为 <https://cohub.run/atou/deepseek-harness/w/deepseek-
 机械交付脚本在等待实时 Harness 连接进入 `networkidle` 时超时，但两个公开 HTTP 探测都返回 `200`。该失败记录得到共享浏览器中的 Work 与 iframe 证据、可见截图、干净控制台、实时插件列表和进程隔离检查补充。两项 Loader 回归测试、定向静态检查、工作区约束以及全部七十八项 DSH-Cohub 验收均通过。
 
 原工作树仍位于 `master`，提交为 `47f943859bef60e4160492346772ded9b24f765a`，原有四十八项未提交现场数量保持不变。没有修改 Cohub 源码，没有合并或推送；预览部署文件只存在于隔离 DSH 分支。
+
+## 2026-08-16 · 远程来源待认证状态
+
+匿名预览版原先会把预期中的 Cohub 身份缺失显示成原始远程来源故障：`cohubSpaces.listSpaces failed: internal: Cohub authentication is required`。浏览器 Provider 在检查不含令牌的账号快照前就调用了 Space 接口，通用远程根契约也没有表达来源正在等待认证的非错误状态。
+
+通用能力接口现在会校验并发布带 Provider 名称的 `authentication-required` 状态。文件树会把 `登录 Cohub 后查看云端文件夹` 显示为普通状态文字，不再作为警报。Cohub Spaces Provider 会在所有 Space I/O 前读取 `cohubAccount.getAccount`；匿名或登录中不会调用 Space 接口，认证完成后通过既有账号变化事件刷新。账号传输和 Space 传输故障仍会明确显示为错误。
+
+三组回归测试先在注册服务、显示界面和 Cohub Provider 三层稳定失败，实现后共二十三项测试通过。专门测试还证明了从匿名到已登录的事件刷新；另一项失败测试证明账号传输错误仍保持可见。客户端聚合类型检查、定向静态检查、工作区约束、浏览器构建和 DSH-Cohub 组合校验均通过。
+
+隔离预览 DSH 进程已在 `3081` 端口重启，`5173` 代理与原版 `3080`/`3000` 进程保持独立。共享浏览器打开真实 Work 后可见待登录提示，没有原始错误；Cohub 账号登录按钮可用，控制台没有错误。没有执行真实登录或计费请求，没有修改 Cohub 代码，也没有推送。
