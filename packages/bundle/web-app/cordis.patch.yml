@@ -168,6 +168,11 @@
     - id: client-runtime
       name: '@deepseek-ai/dsh-client-runtime'
 
+    # Generic remote-root registry. Providers contribute opaque roots without
+    # entering Workspace, cwd, filesystem, or Shell semantics.
+    - id: remote-roots
+      name: '@deepseek-ai/dsh-client-remote-roots'
+
     - id: cordis-client-runner
       name: '@deepseek-ai/dsh-cordis-client-runner'
 

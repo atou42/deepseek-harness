@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-08-16-remote-roots-and-cohub-plugin-boundaries.md
+2026-08-16-remote-roots-and-cohub-plugin-boundaries.md: 3e8c92201fc2de054e299b347abee6515e94ec5e
+2026-08-16-remote-roots-and-cohub-plugin-boundaries.zh.md: 69bc6bbf5783b8a27294b7d2728e4ae343880d40
