@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/host/cohub-spaces/README.md
-README.md: 63b10e2cfc8317a4e43f78764fb26de7428e478f
-README.zh.md: 83e8524c3bbaee7bde78ad82377d8446869a540d
+README.md: 6dced39fd5f458f22e42046566363c70eeabf6ec
+README.zh.md: bf59ff8a060eb86b2865f421ef77dbaa5f4df81e

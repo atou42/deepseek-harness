@@ -22,6 +22,35 @@ export interface CohubSpaceSessionList {
   readonly sessions: readonly CohubSessionView[]
 }
 
+/** One Cohub Turn projected into the provider-neutral conversation view. */
+export interface CohubTurnView {
+  readonly id: string
+  readonly sessionId: string
+  readonly sequence: number
+  readonly status: string
+  readonly userText?: string
+  readonly assistantText?: string
+  readonly errorMessage?: string
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+/** Complete currently available conversation history for one Cohub Session. */
+export interface CohubConversationView {
+  readonly spaceId: string
+  readonly session: CohubSessionView
+  readonly turns: readonly CohubTurnView[]
+}
+
+/** Immediate acceptance returned after sending a Cohub conversation prompt. */
+export interface CohubConversationPromptResult {
+  readonly spaceId: string
+  readonly sessionId: string
+  readonly sessionTitle: string
+  readonly turnId: string
+  readonly turnStatus: string
+}
+
 /** One immediate child returned by the Cohub filesystem API. */
 export interface CohubSpaceEntry {
   readonly path: string

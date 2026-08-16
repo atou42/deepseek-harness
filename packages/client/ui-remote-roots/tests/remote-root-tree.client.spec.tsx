@@ -27,13 +27,31 @@ function readySnapshot(): RemoteRootsSnapshot {
         id: rid('space:opaque-1'),
         title: '故事空间',
         marker: { kind: 'cloud', label: '云端' },
-        capabilities: { browse: true, read: true, write: false },
+        capabilities: { browse: true, read: true, write: false, conversation: true },
       }],
     }],
   }
 }
 
 describe('RemoteRootTree', () => {
+  it('opens a provider-owned Session in the selected Space', async () => {
+    const source = createSnapshotStore(readySnapshot())
+    const activate = vi.fn()
+    const list = vi.fn(async (_sourceId: RemoteRootSourceId, { rootId, parentId }: Parameters<RemoteRootTreeProps['list']>[1]) => ({
+      rootId,
+      parentId,
+      entries: [{ id: rid('session:opaque-1'), parentId, name: '继续插件开发', kind: 'session' as const }],
+    }))
+    const view = render(
+      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={list} activate={activate} t={t} />,
+    )
+    fireEvent.click(view.getByRole('treeitem', { name: '展开 故事空间' }))
+    fireEvent.click(await view.findByRole('treeitem', { name: '会话 继续插件开发' }))
+    expect(activate).toHaveBeenCalledWith(
+      sid('fixture.remote'), rid('space:opaque-1'), rid('session:opaque-1'), '继续插件开发',
+    )
+  })
+
   it('renders a marked folder-like remote root and lists through opaque identities', async () => {
     const source = createSnapshotStore(readySnapshot())
     const list = vi.fn(async (_sourceId: RemoteRootSourceId, { rootId, parentId }: Parameters<RemoteRootTreeProps['list']>[1]) => ({
@@ -46,7 +64,7 @@ describe('RemoteRootTree', () => {
       ],
     }))
     const view = render(
-      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={list} t={t} />,
+      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={list} activate={vi.fn()} t={t} />,
     )
     expect(view.getByText('故事空间').closest('[role="treeitem"]')?.getAttribute('aria-expanded')).toBe('false')
     expect(view.getByText('云端').getAttribute('data-marker-kind')).toBe('cloud')
@@ -76,7 +94,7 @@ describe('RemoteRootTree', () => {
       return { rootId: request.rootId, parentId: request.parentId, entries: [] }
     })
     const view = render(
-      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={list} t={t} />,
+      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={list} activate={vi.fn()} t={t} />,
     )
     fireEvent.click(view.getByRole('treeitem', { name: '展开 故事空间' }))
     expect((await view.findByRole('alert')).textContent).toContain('provider offline')
@@ -99,7 +117,7 @@ describe('RemoteRootTree', () => {
     }>((done) => { resolve = done })
     const list = vi.fn(async (_sourceId: RemoteRootSourceId, _request: Parameters<RemoteRootTreeProps['list']>[1]) => pending)
     const view = render(
-      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={list} t={t} />,
+      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={list} activate={vi.fn()} t={t} />,
     )
     fireEvent.click(view.getByRole('treeitem', { name: '展开 故事空间' }))
     const signal = list.mock.calls[0]?.[1].signal as AbortSignal
@@ -116,7 +134,7 @@ describe('RemoteRootTree', () => {
       sources: [{ sourceId: sid('fixture.remote'), status: 'loading', roots: [] }],
     })
     const view = render(
-      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={vi.fn()} t={t} />,
+      <RemoteRootTree useRemoteRoots={bindSnapshotSelector(source)} list={vi.fn()} activate={vi.fn()} t={t} />,
     )
     expect(view.getByRole('status').textContent).toContain('正在连接')
     source.set({

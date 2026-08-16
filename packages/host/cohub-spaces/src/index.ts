@@ -9,12 +9,15 @@ import {
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   CohubSpaceDirectory,
+  CohubConversationPromptResult,
+  CohubConversationView,
   CohubSpaceEntry,
   CohubSpaceSessionList,
   CohubSpaceTextFile,
   CohubSpaceView,
   CohubSpaceWriteResult,
   CohubSessionView,
+  CohubTurnView,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -156,10 +159,33 @@ interface SessionPage {
   readonly nextCursor?: string
 }
 
+function optionalText(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') throw new TypeError(`cohub-spaces: ${field} must be a string or null`)
+  return value
+}
+
 function isoInstant(value: unknown, field: string): string {
   const instant = nonBlank(value, field)
   if (!Number.isFinite(Date.parse(instant))) throw new TypeError(`cohub-spaces: ${field} must be an ISO-8601 instant`)
   return instant
+}
+
+function parseSession(value: unknown, spaceId: string, field: string): CohubSessionView {
+  const session = record(value, field)
+  const id = nonBlank(session.id, `${field} id`)
+  if (session.spaceId !== spaceId) {
+    throw new TypeError(`cohub-spaces: session "${id}" does not belong to Space "${spaceId}"`)
+  }
+  const latestMessageText = optionalText(session.latestMessageText, `session "${id}" latestMessageText`)
+  return Object.freeze({
+    id,
+    spaceId,
+    title: nonBlank(session.title, `session "${id}" title`),
+    status: nonBlank(session.status, `session "${id}" status`),
+    ...latestMessageText === undefined ? {} : { latestMessageText },
+    updatedAt: isoInstant(session.updatedAt, `session "${id}" updatedAt`),
+  })
 }
 
 function parseSessionPage(value: unknown, spaceId: string): SessionPage {
@@ -173,25 +199,61 @@ function parseSessionPage(value: unknown, spaceId: string): SessionPage {
     ? nonBlank(pageInfo.nextCursor, 'sessions response pageInfo.nextCursor')
     : undefined
   const sessions = body.sessions.map((item, index) => {
-    const session = record(item, `session ${String(index)}`)
-    const id = nonBlank(session.id, `session ${String(index)} id`)
-    if (session.spaceId !== spaceId) {
-      throw new TypeError(`cohub-spaces: session "${id}" does not belong to Space "${spaceId}"`)
-    }
-    const latestMessageText = session.latestMessageText
-    if (latestMessageText !== undefined && latestMessageText !== null && typeof latestMessageText !== 'string') {
-      throw new TypeError(`cohub-spaces: session "${id}" latestMessageText must be a string or null`)
-    }
-    return Object.freeze({
-      id,
-      spaceId,
-      title: nonBlank(session.title, `session "${id}" title`),
-      status: nonBlank(session.status, `session "${id}" status`),
-      ...typeof latestMessageText === 'string' ? { latestMessageText } : {},
-      updatedAt: isoInstant(session.updatedAt, `session "${id}" updatedAt`),
-    })
+    return parseSession(item, spaceId, `session ${String(index)}`)
   })
   return Object.freeze({ sessions: Object.freeze(sessions), hasMore: pageInfo.hasMore, ...nextCursor ? { nextCursor } : {} })
+}
+
+interface TurnPage {
+  readonly session: CohubSessionView
+  readonly turns: readonly CohubTurnView[]
+  readonly hasMore: boolean
+  readonly nextCursor?: string
+}
+
+function parseTurnPage(value: unknown, spaceId: string, sessionId: string): TurnPage {
+  const body = record(value, 'turns response')
+  const session = parseSession(body.session, spaceId, 'turns response session')
+  if (session.id !== sessionId) throw new TypeError('cohub-spaces: turns response Session does not match request')
+  if (!Array.isArray(body.turns)) throw new TypeError('cohub-spaces: turns response turns must be an array')
+  if (typeof body.hasMore !== 'boolean') throw new TypeError('cohub-spaces: turns response hasMore must be a boolean')
+  const nextCursor = body.hasMore ? String(safeInteger(body.nextCursor, 'turns response nextCursor')) : undefined
+  const turns = body.turns.map((value, index) => {
+    const turn = record(value, `turn ${String(index)}`)
+    const id = nonBlank(turn.id, `turn ${String(index)} id`)
+    if (turn.sessionId !== sessionId) throw new TypeError(`cohub-spaces: turn "${id}" does not belong to Session "${sessionId}"`)
+    const userText = optionalText(turn.userText, `turn "${id}" userText`)
+    const assistantText = optionalText(turn.assistantText, `turn "${id}" assistantText`)
+    const errorMessage = optionalText(turn.errorMessage, `turn "${id}" errorMessage`)
+    return Object.freeze({
+      id,
+      sessionId,
+      sequence: safeInteger(turn.sequence, `turn "${id}" sequence`),
+      status: nonBlank(turn.status, `turn "${id}" status`),
+      ...userText === undefined ? {} : { userText },
+      ...assistantText === undefined ? {} : { assistantText },
+      ...errorMessage === undefined ? {} : { errorMessage },
+      createdAt: isoInstant(turn.createdAt, `turn "${id}" createdAt`),
+      updatedAt: isoInstant(turn.updatedAt, `turn "${id}" updatedAt`),
+    })
+  })
+  return Object.freeze({ session, turns: Object.freeze(turns), hasMore: body.hasMore, ...nextCursor ? { nextCursor } : {} })
+}
+
+function parsePromptResult(value: unknown, spaceId: string): CohubConversationPromptResult {
+  const body = record(value, 'prompt response')
+  if (body.mode !== 'immediate') throw new TypeError('cohub-spaces: prompt response must be immediate')
+  const session = parseSession(body.session, spaceId, 'prompt response session')
+  const turn = record(body.turn, 'prompt response turn')
+  const turnId = nonBlank(turn.id, 'prompt response turn id')
+  if (turn.sessionId !== session.id) throw new TypeError('cohub-spaces: prompt response Turn does not belong to its Session')
+  return Object.freeze({
+    spaceId,
+    sessionId: session.id,
+    sessionTitle: session.title,
+    turnId,
+    turnStatus: nonBlank(turn.status, 'prompt response turn status'),
+  })
 }
 
 function parseEntry(value: unknown, requestedPath: string, index: number): CohubSpaceEntry {
@@ -318,6 +380,22 @@ export class CohubSpacesGateway extends TypertRemoteService {
     return this.track(this.listSessionsImpl(spaceId))
   }
 
+  /** Read all currently retained Turns for one Cohub Session. */
+  @Remote('getConversation')
+  getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView> {
+    return this.track(this.getConversationImpl(spaceId, sessionId))
+  }
+
+  /** Send text to an existing Cohub Session, or create one on the first prompt. */
+  @Remote('promptConversation')
+  promptConversation(
+    spaceId: string,
+    sessionId: string | undefined,
+    text: string,
+  ): Promise<CohubConversationPromptResult> {
+    return this.track(this.promptConversationImpl(spaceId, sessionId, text))
+  }
+
   /** List one exact Space-relative directory. */
   @Remote('listDirectory')
   listDirectory(spaceId: string, path: string): Promise<CohubSpaceDirectory> {
@@ -369,6 +447,66 @@ export class CohubSpacesGateway extends TypertRemoteService {
       cursors.add(cursor)
     } while (true)
     return Object.freeze({ spaceId, sessions: Object.freeze(sessions) })
+  }
+
+  private async getConversationImpl(spaceIdValue: string, sessionIdValue: string): Promise<CohubConversationView> {
+    const spaceId = nonBlank(spaceIdValue, 'spaceId')
+    const sessionId = nonBlank(sessionIdValue, 'sessionId')
+    const token = await this.ctx.cohubAccount.getAccessToken()
+    const turns: CohubTurnView[] = []
+    const ids = new Set<string>()
+    const cursors = new Set<string>()
+    let cursor: string | undefined
+    let session!: CohubSessionView
+    let firstPage = true
+    do {
+      const params = new URLSearchParams({ direction: 'older', limit: '100' })
+      if (cursor !== undefined) params.set('cursor', cursor)
+      const { data } = await this.requestWithToken(
+        `/api/sessions/${encodeURIComponent(sessionId)}/turns?${params.toString()}`,
+        token,
+      )
+      const page = parseTurnPage(data, spaceId, sessionId)
+      if (firstPage) {
+        session = page.session
+        firstPage = false
+      } else if (page.session.updatedAt !== session.updatedAt || page.session.title !== session.title) {
+        throw new TypeError('cohub-spaces: turns pages disagree about their Session')
+      }
+      for (const turn of page.turns) {
+        if (ids.has(turn.id)) throw new TypeError(`cohub-spaces: duplicate turn id "${turn.id}"`)
+        ids.add(turn.id)
+        turns.push(turn)
+      }
+      if (!page.hasMore) break
+      cursor = page.nextCursor
+      if (cursor === undefined || cursors.has(cursor)) {
+        throw new TypeError('cohub-spaces: turns response cursor did not advance')
+      }
+      cursors.add(cursor)
+    } while (true)
+    turns.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
+    return Object.freeze({ spaceId, session, turns: Object.freeze(turns) })
+  }
+
+  private async promptConversationImpl(
+    spaceIdValue: string,
+    sessionIdValue: string | undefined,
+    textValue: string,
+  ): Promise<CohubConversationPromptResult> {
+    const spaceId = nonBlank(spaceIdValue, 'spaceId')
+    const sessionId = sessionIdValue === undefined ? undefined : nonBlank(sessionIdValue, 'sessionId')
+    const text = nonBlank(textValue, 'text')
+    const { data } = await this.request(`/api/spaces/${encodeURIComponent(spaceId)}/prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...sessionId === undefined ? {} : { sessionId },
+        content: [{ type: 'text', text }],
+        accessMode: 'full_access',
+      }),
+    })
+    return parsePromptResult(data, spaceId)
   }
 
   private async listDirectoryImpl(spaceIdValue: string, pathValue: string): Promise<CohubSpaceDirectory> {

@@ -7,6 +7,9 @@ import type {
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from '../src/client/contract/slots.ts'
+import type {
+  RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -34,6 +37,7 @@ const workspaceState = (items: readonly WorkspaceView[]): WorkspaceListState => 
   items, archivedSessionIds: [], state: 'idle', phase: 'ready', error: null, baselinesReady: true,
   recentWorkspaceId: items[0]?.workspaceId,
 })
+const emptyRemoteRoots: RemoteRootsSnapshot = { revision: 0, sources: [] }
 function anchor(): { current: HTMLElement } {
   const element = document.createElement('button')
   element.getBoundingClientRect = () => ({
@@ -81,9 +85,11 @@ function mount(
   items: readonly WorkspaceView[] = [workspace('alpha', 'Alpha')],
   createWorkspace = vi.fn(),
   occupancy = occupancySource(),
+  remoteRoots: RemoteRootsSnapshot = emptyRemoteRoots,
 ) {
   const onPick = vi.fn()
   const onClose = vi.fn()
+  const activateRemote = vi.fn()
   const anchorRef = anchor()
   const { probe, renderSlot } = flowProbe()
   const renderPicker = (nextItems: readonly WorkspaceView[]) => (
@@ -92,6 +98,8 @@ function mount(
       anchorRef={anchorRef}
       useSessions={hook(sessions)}
       useWorkspaces={hook(workspaceState(nextItems))}
+      useRemoteRoots={hook(remoteRoots)}
+      activateRemote={activateRemote}
       onPick={onPick}
       onClose={onClose}
       createWorkspace={createWorkspace}
@@ -104,7 +112,7 @@ function mount(
     renderPicker(items),
   )
   return {
-    view, onPick, onClose, createWorkspace, probe, occupancy,
+    view, onPick, onClose, activateRemote, createWorkspace, probe, occupancy,
     rerenderItems: (nextItems: readonly WorkspaceView[]) => { view.rerender(renderPicker(nextItems)) },
   }
 }
@@ -114,6 +122,30 @@ function chooseAdd(): void {
 }
 
 describe('WorkspacePicker', () => {
+  it('lists conversational Cohub Spaces and opens the remote workbench without creating a local Workspace', () => {
+    const sourceId = 'cohub' as RemoteRootSourceId
+    const rootId = 'space-1' as RemoteResourceId
+    const remoteRoots: RemoteRootsSnapshot = {
+      revision: 1,
+      sources: [{
+        sourceId,
+        status: 'ready',
+        roots: [{
+          id: rootId,
+          title: 'deepseek harness',
+          marker: { kind: 'cloud', label: 'Cohub' },
+          capabilities: { browse: true, read: false, write: false, conversation: true },
+        }],
+      }],
+    }
+    const b = mount([], vi.fn(), occupancySource(), remoteRoots)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'deepseek harness · Cohub' }))
+    expect(b.activateRemote).toHaveBeenCalledWith(sourceId, rootId)
+    expect(b.onClose).toHaveBeenCalled()
+    expect(b.onPick).not.toHaveBeenCalled()
+    expect(b.createWorkspace).not.toHaveBeenCalled()
+  })
+
   it('lists same-title Workspaces separately and forwards the selected id', () => {
     const b = mount([workspace('alpha', 'Shared'), workspace('beta', 'Shared')])
     const entries = screen.getAllByRole('menuitem', { name: 'Shared' })
@@ -211,6 +243,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open useSessions={hook(sessions)} useWorkspaces={hook(workspaceState([workspace('alpha', 'Alpha')]))}
+        useRemoteRoots={hook(emptyRemoteRoots)} activateRemote={vi.fn()}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}
       />,
@@ -226,6 +259,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open anchorRef={anchor()} useSessions={hook(sessions)} useWorkspaces={hook(state)}
+        useRemoteRoots={hook(emptyRemoteRoots)} activateRemote={vi.fn()}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}
       />,

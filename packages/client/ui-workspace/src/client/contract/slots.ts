@@ -30,6 +30,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   SessionId, SessionSearchResultItem, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  RemoteResourceId, RemoteRootsSnapshot, RemoteRootSourceId,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { createWorkspaceViewStore } from '../stores.ts'
 
 /**
@@ -78,9 +81,13 @@ export type DirectoryFlowSlotName =
  * flow whose occupant unloaded mid-interaction (nobody is left to cancel).
  */
 export type DirectoryPickingInjected = {
+  /** Open a provider-owned remote Space in its conversation workbench. */
+  activateRemote: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => void
   hooks: {
     /** True while this surface's directory-flow hole is occupied. */
     directoryFlow: HostObservable<boolean>
+    /** Provider-neutral cloud roots available to workspace selectors. */
+    remoteRoots: HostObservable<RemoteRootsSnapshot>
   }
 }
 
@@ -88,6 +95,8 @@ export type DirectoryPickingInjected = {
 export type DirectoryPickingHooks = {
   /** Selector hook over this surface's directory-flow occupancy. */
   useDirectoryFlow: SnapshotSelectorHook<boolean>
+  /** Live remote Spaces and the selected remote conversation target. */
+  useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
 }
 
 /**

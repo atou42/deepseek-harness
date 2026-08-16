@@ -65,6 +65,8 @@ describe('CohubSpacesGateway', () => {
     expect(remoteMethods(spaces)).toEqual([
       { method: 'listSpaces', invocation: { kind: 'direct' } },
       { method: 'listSessions', invocation: { kind: 'direct' } },
+      { method: 'getConversation', invocation: { kind: 'direct' } },
+      { method: 'promptConversation', invocation: { kind: 'direct' } },
       { method: 'listDirectory', invocation: { kind: 'direct' } },
       { method: 'readText', invocation: { kind: 'direct' } },
       { method: 'writeText', invocation: { kind: 'direct' } },
@@ -107,6 +109,53 @@ describe('CohubSpacesGateway', () => {
       'https://cohub.example.test/api/spaces/space-1/sessions?limit=100',
       'https://cohub.example.test/api/spaces/space-1/sessions?limit=100&cursor=cursor-2',
     ])
+  })
+
+  it('loads a Cohub conversation and sends the first prompt into a new Cohub Session', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({
+        session: { id: 'session-1', spaceId: 'space-1', title: 'Remote chat', status: 'active', updatedAt: '2026-08-16T10:00:01.000Z' },
+        turns: [{
+          id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'completed',
+          userText: 'hello', assistantText: 'world', errorMessage: null,
+          createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
+        }],
+        hasMore: false,
+        nextCursor: null,
+      }))
+      .mockResolvedValueOnce(json({
+        mode: 'immediate',
+        session: { id: 'session-2', spaceId: 'space-1', title: 'New remote chat', status: 'active', updatedAt: '2026-08-16T10:01:00.000Z' },
+        turn: { id: 'turn-2', sessionId: 'session-2', sequence: 1, status: 'running' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces } = await boot()
+    const conversation = spaces as unknown as {
+      getConversation(spaceId: string, sessionId: string): Promise<unknown>
+      promptConversation(spaceId: string, sessionId: string | undefined, text: string): Promise<unknown>
+    }
+
+    await expect(conversation.getConversation('space-1', 'session-1')).resolves.toEqual({
+      spaceId: 'space-1',
+      session: { id: 'session-1', spaceId: 'space-1', title: 'Remote chat', status: 'active', updatedAt: '2026-08-16T10:00:01.000Z' },
+      turns: [{
+        id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'completed',
+        userText: 'hello', assistantText: 'world',
+        createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
+      }],
+    })
+    await expect(conversation.promptConversation('space-1', undefined, 'start here')).resolves.toEqual({
+      spaceId: 'space-1', sessionId: 'session-2', sessionTitle: 'New remote chat',
+      turnId: 'turn-2', turnStatus: 'running',
+    })
+    expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://cohub.example.test/api/sessions/session-1/turns?direction=older&limit=100',
+      'https://cohub.example.test/api/spaces/space-1/prompt',
+    ])
+    expect(JSON.parse((fetchMock.mock.calls[1]?.[1] as RequestInit).body as string)).toEqual({
+      content: [{ type: 'text', text: 'start here' }],
+      accessMode: 'full_access',
+    })
   })
 
   it('lists accessible Spaces and preserves file, folder, and symlink kinds', async () => {

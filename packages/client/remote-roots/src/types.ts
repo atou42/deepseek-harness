@@ -17,6 +17,8 @@ export interface RemoteRootCapabilities {
   readonly browse: true
   readonly read: boolean
   readonly write: boolean
+  /** The root can open provider-owned Sessions and start a new conversation. */
+  readonly conversation?: boolean
 }
 
 /** One top-level remote root shown beside, but never converted into, local Workspaces. */
@@ -44,6 +46,48 @@ export interface RemoteRootsSnapshot {
     readonly message?: string
     readonly provider?: string
   }[]
+  /** Provider-owned conversation currently occupying the remote workbench. */
+  readonly active?: RemoteConversationTarget
+}
+
+/** Selected remote Space and optional Session. */
+export interface RemoteConversationTarget {
+  readonly sourceId: RemoteRootSourceId
+  readonly rootId: RemoteResourceId
+  readonly rootTitle: string
+  readonly sessionId?: RemoteResourceId
+  readonly sessionTitle?: string
+}
+
+/** One provider-owned remote Turn. */
+export interface RemoteConversationTurn {
+  readonly id: RemoteResourceId
+  readonly sequence: number
+  readonly status: string
+  readonly userText?: string
+  readonly assistantText?: string
+  readonly errorMessage?: string
+  readonly updatedAt: string
+}
+
+/** Conversation history for a selected remote Space or Session. */
+export interface RemoteConversationView {
+  readonly rootId: RemoteResourceId
+  readonly session?: {
+    readonly id: RemoteResourceId
+    readonly title: string
+    readonly status: string
+  }
+  readonly turns: readonly RemoteConversationTurn[]
+}
+
+/** Acceptance result for one remote prompt. */
+export interface RemoteConversationPromptResult {
+  readonly rootId: RemoteResourceId
+  readonly sessionId: RemoteResourceId
+  readonly sessionTitle: string
+  readonly turnId: RemoteResourceId
+  readonly turnStatus: string
 }
 
 /** A child entry within a provider-owned root. Parent identities remain opaque. */
@@ -103,4 +147,15 @@ export interface RemoteRootSource {
     readonly ifRevision: string
     readonly signal?: AbortSignal
   }): Promise<RemoteTextWriteResult>
+  readConversation?(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationView>
+  promptConversation?(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly text: string
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationPromptResult>
 }

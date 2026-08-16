@@ -29,8 +29,9 @@ export type {
   CohubBoardRecord, CohubBoardSnapshot,
 } from '@deepseek-ai/dsh-cohub-board/types'
 export type {
-  CohubSessionView, CohubSpaceDirectory, CohubSpaceEntry, CohubSpaceSessionList,
-  CohubSpaceTextFile, CohubSpaceView, CohubSpaceWriteResult,
+  CohubConversationPromptResult, CohubConversationView, CohubSessionView,
+  CohubSpaceDirectory, CohubSpaceEntry, CohubSpaceSessionList, CohubSpaceTextFile,
+  CohubSpaceView, CohubSpaceWriteResult, CohubTurnView,
 } from '@deepseek-ai/dsh-cohub-spaces/types'
 // The forwarded-event allowlist's selection seat: without it in the consumer's
 // compilation face `TypertRemoteEvent` is `never` and every `$on` call fails.

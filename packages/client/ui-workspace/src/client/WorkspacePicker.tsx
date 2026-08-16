@@ -16,6 +16,9 @@ import {
 import type {
   WorkspaceId, WorkspaceListState, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/slots.ts'
 import css from './WorkspacePicker.module.css'
@@ -32,6 +35,10 @@ export interface WorkspacePickFlowProps {
   anchorRef?: RefObject<HTMLElement | null> | undefined
   /** Selector hook over the workspace list (framework standard hook). */
   useWorkspaces: <S>(selector: (state: WorkspaceListState) => S) => S
+  /** Selector hook over provider-owned remote Spaces. */
+  useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
+  /** Open a provider-owned remote Space without adopting it as a local Workspace. */
+  activateRemote: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => void
   /** Adopt a picked host directory as a real Workspace. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
   /** Bound occupancy selector hook for this surface's directory-flow hole (empty leaves the surface with no add action). */
@@ -60,6 +67,8 @@ export function WorkspacePickFlow({
   open,
   anchorRef,
   useWorkspaces,
+  useRemoteRoots,
+  activateRemote,
   createWorkspace,
   useDirectoryFlow,
   renderDirectoryFlow,
@@ -70,7 +79,17 @@ export function WorkspacePickFlow({
   selectedId,
 }: WorkspacePickFlowProps) {
   const workspaceSnapshot = useWorkspaces(state => state)
+  const remoteSnapshot = useRemoteRoots(state => state)
   const workspaces = workspaceSnapshot.items
+  const remoteEntries = addOnly ? [] : remoteSnapshot.sources.flatMap(source => source.status === 'ready'
+    ? source.roots.filter(root => root.capabilities.conversation === true).map(root => ({
+      id: JSON.stringify(['remote', source.sourceId, root.id]),
+      sourceId: source.sourceId,
+      rootId: root.id,
+      label: `${root.title} · ${root.marker.label}`,
+    }))
+    : [])
+  const remoteByMenuId = new Map(remoteEntries.map(entry => [entry.id, entry]))
   const getAnchorRect = useCallback(
     () => anchorRef?.current?.getBoundingClientRect() ?? null,
     [anchorRef],
@@ -103,14 +122,19 @@ export function WorkspacePickFlow({
     : []
   // With workspaces listed, the add action pins below the scroll region
   // (divider + always visible); otherwise it IS the menu.
-  const pinAdd = !addOnly && workspaces.length > 0
+  const pinAdd = !addOnly && (workspaces.length > 0 || remoteEntries.length > 0)
   const items: MenuEntry[] = pinAdd
-    ? workspaces.map(workspace => ({
+    ? [...workspaces.map(workspace => ({
       id: workspace.workspaceId,
       label: workspace.title,
       icon: <IconFolderClose16 size={16} />,
       disabled: flowBusy,
-    }))
+    })), ...remoteEntries.map(entry => ({
+      id: entry.id,
+      label: entry.label,
+      icon: <IconFolderClose16 size={16} />,
+      disabled: flowBusy,
+    }))]
     : addEntries
   // Nothing listed and nothing to add with (a composition that mounts this
   // package without any directory-picker): an empty popover would claim a
@@ -148,7 +172,8 @@ export function WorkspacePickFlow({
   // only final once the baseline lands — until then the menu stays up with its
   // loading status instead of jumping into a flow the arriving list would have
   // made unnecessary; the add-only surface lists nothing and never waits.
-  const listSettled = addOnly || workspaceSnapshot.phase === 'ready'
+  const remoteSettled = remoteSnapshot.sources.every(source => source.status !== 'loading')
+  const listSettled = addOnly || (workspaceSnapshot.phase === 'ready' && remoteSettled)
   const addIsTheOnlyEntry = !pinAdd && listSettled && addEntries.length === 1
   // `flowBusy` gates this exactly as it disables the equivalent menu entry: a
   // pick still being adopted owns the surface until it settles.
@@ -177,8 +202,18 @@ export function WorkspacePickFlow({
       openDirectoryFlow()
       return
     }
+    const remote = remoteByMenuId.get(id)
+    if (remote !== undefined) {
+      activateRemote(remote.sourceId, remote.rootId)
+      onClose()
+      return
+    }
     onPick(id as WorkspaceId)
   }
+
+  const selectedRemoteId = remoteSnapshot.active === undefined
+    ? undefined
+    : JSON.stringify(['remote', remoteSnapshot.active.sourceId, remoteSnapshot.active.rootId])
 
   return (
     <>
@@ -187,14 +222,14 @@ export function WorkspacePickFlow({
         anchor={null}
         items={items}
         {...pinAdd ? { footer: addEntries } : {}}
-        selectedId={selectedId}
+        selectedId={selectedRemoteId ?? selectedId}
         onSelect={handleSelect}
         onClose={onClose}
         side={side}
         portal
         getAnchorRect={getAnchorRect}
       />
-      {open && !addIsTheOnlyEntry && !menuIsEmpty && workspaceSnapshot.phase === 'pending' && <div className={css.menuStatus} role="status">{t('picker.loading')}</div>}
+      {open && !addIsTheOnlyEntry && !menuIsEmpty && !listSettled && <div className={css.menuStatus} role="status">{t('picker.loading')}</div>}
       {renderDirectoryFlow(flowOwner)}
       <Modal
         open={errorOpen}
@@ -226,6 +261,8 @@ export function WorkspacePicker({
   open,
   anchorRef,
   useWorkspaces,
+  useRemoteRoots,
+  activateRemote,
   selectedId,
   onPick,
   onClose,
@@ -240,6 +277,8 @@ export function WorkspacePicker({
       open={open}
       anchorRef={anchorRef}
       useWorkspaces={useWorkspaces}
+      useRemoteRoots={useRemoteRoots}
+      activateRemote={activateRemote}
       createWorkspace={createWorkspace}
       useDirectoryFlow={useDirectoryFlow}
       renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}

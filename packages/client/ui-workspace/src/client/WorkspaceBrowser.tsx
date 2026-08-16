@@ -743,6 +743,7 @@ export function WorkspaceBrowser({
   expandSidebar,
   useSessions,
   useWorkspaces,
+  useRemoteRoots,
   useStore,
   actions,
   startSession,
@@ -755,6 +756,7 @@ export function WorkspaceBrowser({
   archiveSession,
   insertSessionBefore,
   createWorkspace,
+  activateRemote,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
@@ -1072,6 +1074,8 @@ export function WorkspaceBrowser({
           open={wsPickerOpen}
           anchorRef={wsPlusRef}
           useWorkspaces={useWorkspaces}
+          useRemoteRoots={useRemoteRoots}
+          activateRemote={activateRemote}
           createWorkspace={createWorkspace}
           useDirectoryFlow={useDirectoryFlow}
           renderDirectoryFlow={owner => renderSlot('sidebar.workspaces.directoryFlow', owner)}

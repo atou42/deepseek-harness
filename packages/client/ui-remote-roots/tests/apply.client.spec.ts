@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-remote-roots/client'
-import type { RemoteRootTreeInjected } from '@deepseek-ai/dsh-client-ui-remote-roots/client'
+import type {
+  RemoteConversationOverlayInjected, RemoteRootTreeInjected,
+} from '@deepseek-ai/dsh-client-ui-remote-roots/client'
+import { RemoteConversationOverlay } from '../src/client/RemoteConversationOverlay.tsx'
 
 async function bench() {
   const ctx = new Context()
@@ -13,14 +16,23 @@ async function bench() {
   ctx.provide('locale', locale)
   const snapshot = { getSnapshot: () => ({ revision: 0, sources: [] }), subscribe: () => () => {} }
   const list = vi.fn()
-  ctx.provide('remoteRoots', { snapshot, list } as never)
-  return { ctx, slots, locale, snapshot, list }
+  const activate = vi.fn()
+  const deactivate = vi.fn()
+  const readConversation = vi.fn()
+  const promptConversation = vi.fn()
+  ctx.provide('remoteRoots', {
+    snapshot, list, activate, deactivate, readConversation, promptConversation,
+  } as never)
+  return { ctx, slots, locale, snapshot, list, activate, deactivate, readConversation, promptConversation }
 }
 
 function declare(slots: SlotRegistry): () => void {
   return slots.register({
     name: 'root',
-    children: { 'sidebar.workspaces.remoteRoots': { kind: 'single', scope: 'root' } },
+    children: {
+      'sidebar.workspaces.remoteRoots': { kind: 'single', scope: 'root' },
+      'shell.overlay': { kind: 'list', scope: 'root' },
+    },
   } as never, () => null)
 }
 
@@ -46,8 +58,16 @@ describe('ui-remote-roots apply', () => {
     expect(before.list).toHaveBeenCalledWith('fixture.remote', {
       rootId: 'root', parentId: 'folder', signal,
     })
+    injected.activate('fixture.remote' as never, 'root' as never, 'session' as never, 'Session')
+    expect(before.activate).toHaveBeenCalledWith('fixture.remote', 'root', 'session', 'Session')
+    const overlayEntry = before.slots.entries('shell.overlay')[0]!
+    expect(overlayEntry.component).toBe(RemoteConversationOverlay)
+    const overlay = (overlayEntry.inject as unknown as () => RemoteConversationOverlayInjected)()
+    overlay.deactivate()
+    expect(before.deactivate).toHaveBeenCalled()
     await first.dispose()
     expect(before.slots.entries('sidebar.workspaces.remoteRoots')).toHaveLength(0)
+    expect(before.slots.entries('shell.overlay')).toHaveLength(0)
 
     const after = await bench()
     const second = after.ctx.plugin({ inject: [...inject], apply })

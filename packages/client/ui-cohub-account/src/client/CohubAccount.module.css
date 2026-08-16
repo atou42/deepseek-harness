@@ -3,7 +3,7 @@
 .trigger.rail { width:36px; height:36px; margin:4px 0; padding:0; justify-content:center; border-radius:50%; }
 .overlay { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; }
 .mask { position:absolute; inset:0; border:0; background:var(--dsw-alias-bg-mask-1); backdrop-filter:var(--dsw-mask-blur); }
-.panel { position:relative; z-index:1; width:min(480px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border-radius:22px; background:var(--dsw-alias-bg-layer-2); box-shadow:var(--dsw-shadow-lv3); }
+.panel { --dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2); --dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2); position:relative; z-index:1; width:min(480px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border-radius:22px; background:var(--dsw-alias-bg-layer-2); box-shadow:var(--dsw-shadow-lv3); }
 .header { display:flex; align-items:center; justify-content:space-between; min-height:64px; padding:14px 16px 10px 24px; border-bottom:1px solid var(--dsw-alias-border-1); }
 .header h2 { margin:0; color:var(--dsw-alias-label-primary); font-size:18px; }
 .iconButton { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:0; border-radius:50%; background:transparent; color:var(--dsw-alias-label-primary); cursor:pointer; }

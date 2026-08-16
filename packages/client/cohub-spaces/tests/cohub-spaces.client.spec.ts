@@ -17,6 +17,8 @@ function remote(overrides: Partial<CohubSpacesRemoteApi> = {}): CohubSpacesRemot
     })),
     listSpaces: vi.fn(async () => []),
     listSessions: vi.fn(async (spaceId: string) => ({ spaceId, sessions: [] })),
+    getConversation: vi.fn(async () => { throw new Error('no Session selected') }),
+    promptConversation: vi.fn(async () => { throw new Error('prompt not configured') }),
     ...overrides,
   }
 }
@@ -48,11 +50,11 @@ describe('CohubSpacesRemoteRootSource', () => {
         roots: [
           {
             id: 'space-1', title: 'World Bible', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false },
+            capabilities: { browse: true, read: false, write: false, conversation: true },
           },
           {
             id: 'space-2', title: 'Drafts', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false },
+            capabilities: { browse: true, read: false, write: false, conversation: true },
           },
         ],
       }],
@@ -98,6 +100,39 @@ describe('CohubSpacesRemoteRootSource', () => {
       ],
     })
     expect(JSON.stringify(listing)).not.toContain('/workspace')
+    source.dispose()
+  })
+
+  it('projects Cohub history and first-prompt creation through opaque remote identities', async () => {
+    const getConversation = vi.fn(async (spaceId: string, sessionId: string) => ({
+      spaceId,
+      session: { id: sessionId, spaceId, title: 'Existing chat', status: 'active', updatedAt: '2026-08-16T10:00:00.000Z' },
+      turns: [{
+        id: 'turn-1', sessionId, sequence: 1, status: 'completed', userText: 'hello', assistantText: 'world',
+        createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
+      }],
+    }))
+    const promptConversation = vi.fn(async (spaceId: string) => ({
+      spaceId, sessionId: 'session-new', sessionTitle: 'New chat', turnId: 'turn-new', turnStatus: 'running',
+    }))
+    const source = new CohubSpacesRemoteRootSource(remote({ getConversation, promptConversation }))
+    const rootId = 'space-1' as RemoteResourceId
+    const existingId = JSON.stringify(['space-1', 'session-1']) as RemoteResourceId
+
+    await expect(source.readConversation({ rootId, sessionId: existingId })).resolves.toMatchObject({
+      rootId,
+      session: { id: existingId, title: 'Existing chat', status: 'active' },
+      turns: [{ id: JSON.stringify(['space-1', 'session-1', 'turn-1']), userText: 'hello', assistantText: 'world' }],
+    })
+    await expect(source.promptConversation({ rootId, text: 'start here' })).resolves.toEqual({
+      rootId,
+      sessionId: JSON.stringify(['space-1', 'session-new']),
+      sessionTitle: 'New chat',
+      turnId: JSON.stringify(['space-1', 'session-new', 'turn-new']),
+      turnStatus: 'running',
+    })
+    expect(getConversation).toHaveBeenCalledWith('space-1', 'session-1')
+    expect(promptConversation).toHaveBeenCalledWith('space-1', undefined, 'start here')
     source.dispose()
   })
 
@@ -184,6 +219,8 @@ describe('CohubSpacesRemoteRootSource', () => {
         cohubSpaces: {
           listSpaces,
           listSessions: vi.fn(),
+          getConversation: vi.fn(),
+          promptConversation: vi.fn(),
         },
         $on: vi.fn((_event, listener: () => void) => { changed = listener; return off }),
       },

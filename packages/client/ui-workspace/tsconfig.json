@@ -12,6 +12,9 @@
       "path": "../locale"
     },
     {
+      "path": "../remote-roots"
+    },
+    {
       "path": "../../../vendor/cordis"
     },
     {

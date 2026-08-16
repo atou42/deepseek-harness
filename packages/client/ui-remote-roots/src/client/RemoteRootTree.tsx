@@ -19,20 +19,43 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function LeafRow({ entry, depth, t }: { entry: RemoteResourceEntry; depth: number; t: Translate }) {
+function LeafRow({ entry, sourceId, rootId, depth, activate, t }: {
+  entry: RemoteResourceEntry
+  sourceId: RemoteRootSourceId
+  rootId: RemoteResourceId
+  depth: number
+  activate: RemoteRootTreeProps['activate']
+  t: Translate
+}) {
+  const content = <>
+    <span className={css.chevronSpacer} />
+    {entry.kind === 'session'
+      ? <IconNewChatOutline16 size={14} className={css.fileIcon} />
+      : <span className={css.fileIcon} aria-hidden="true" />}
+    <span className={css.name}>{entry.name}</span>
+  </>
+  if (entry.kind === 'session') return (
+    <button
+      type="button"
+      className={css.row}
+      role="treeitem"
+      aria-label={t('session', { name: entry.name })}
+      style={{ paddingInlineStart: `${8 + depth * 16}px` }}
+      data-remote-resource-id={entry.id}
+      onClick={() => { activate(sourceId, rootId, entry.id, entry.name) }}
+    >
+      {content}
+    </button>
+  )
   return (
     <div
       className={css.row}
       role="treeitem"
-      aria-label={t(entry.kind === 'session' ? 'session' : entry.kind === 'link' ? 'link' : 'file', { name: entry.name })}
+      aria-label={t(entry.kind === 'link' ? 'link' : 'file', { name: entry.name })}
       style={{ paddingInlineStart: `${8 + depth * 16}px` }}
       data-remote-resource-id={entry.id}
     >
-      <span className={css.chevronSpacer} />
-      {entry.kind === 'session'
-        ? <IconNewChatOutline16 size={14} className={css.fileIcon} />
-        : <span className={css.fileIcon} aria-hidden="true" />}
-      <span className={css.name}>{entry.name}</span>
+      {content}
     </div>
   )
 }
@@ -45,10 +68,11 @@ interface FolderProps {
   readonly marker?: RemoteRootView['marker']
   readonly depth: number
   readonly list: RemoteRootTreeProps['list']
+  readonly activate: RemoteRootTreeProps['activate']
   readonly t: Translate
 }
 
-function Folder({ sourceId, rootId, id, name, marker, depth, list, t }: FolderProps) {
+function Folder({ sourceId, rootId, id, name, marker, depth, list, activate, t }: FolderProps) {
   const [open, setOpen] = useState(false)
   const [listing, setListing] = useState<ListingState>({ status: 'idle' })
   const request = useRef<{ controller: AbortController; generation: number }>()
@@ -134,17 +158,18 @@ function Folder({ sourceId, rootId, id, name, marker, depth, list, t }: FolderPr
                 name={entry.name}
                 depth={depth + 1}
                 list={list}
+                activate={activate}
                 t={t}
               />
             )
-            : <LeafRow key={entry.id} entry={entry} depth={depth + 1} t={t} />)}
+            : <LeafRow key={entry.id} entry={entry} sourceId={sourceId} rootId={rootId} depth={depth + 1} activate={activate} t={t} />)}
         </div>
       )}
     </div>
   )
 }
 
-export function RemoteRootTree({ useRemoteRoots, list, t }: RemoteRootTreeProps) {
+export function RemoteRootTree({ useRemoteRoots, list, activate, t }: RemoteRootTreeProps) {
   const sources = useRemoteRoots(snapshot => snapshot.sources)
   if (sources.length === 0) return null
   return (
@@ -170,6 +195,7 @@ export function RemoteRootTree({ useRemoteRoots, list, t }: RemoteRootTreeProps)
                 marker={root.marker}
                 depth={0}
                 list={list}
+                activate={activate}
                 t={t}
               />
             ))}

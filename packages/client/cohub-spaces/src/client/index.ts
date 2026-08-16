@@ -2,12 +2,12 @@
 
 import type { ClientContext, ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  CohubAccountSnapshot,
+  CohubAccountSnapshot, CohubConversationPromptResult, CohubConversationView,
   CohubSpaceSessionList,
   CohubSpaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
-  RemoteDirectoryListing,
+  RemoteConversationPromptResult, RemoteConversationView, RemoteDirectoryListing,
   RemoteResourceId,
   RemoteRootSource,
   RemoteRootSourceId,
@@ -22,6 +22,8 @@ export interface CohubSpacesRemoteApi {
   getAccount(): Promise<CohubAccountSnapshot>
   listSpaces(): Promise<readonly CohubSpaceView[]>
   listSessions(spaceId: string): Promise<CohubSpaceSessionList>
+  getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView>
+  promptConversation(spaceId: string, sessionId: string | undefined, text: string): Promise<CohubConversationPromptResult>
 }
 
 type RemoteAnswer<T> =
@@ -47,6 +49,22 @@ function unwrapRemote<T>(operation: string, answer: RemoteAnswer<T>): T {
 
 function resourceId(spaceId: string, path: string): RemoteResourceId {
   return JSON.stringify([spaceId, path]) as RemoteResourceId
+}
+
+function sessionId(rootId: RemoteResourceId, value: RemoteResourceId): string {
+  let parsed: unknown
+  try { parsed = JSON.parse(value) } catch (error) {
+    throw new TypeError('client-cohub-spaces: Session identity is malformed', { cause: error })
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 2 || parsed[0] !== rootId
+    || typeof parsed[1] !== 'string' || parsed[1].trim().length === 0) {
+    throw new TypeError('client-cohub-spaces: Session identity does not match the requested Space')
+  }
+  return parsed[1]
+}
+
+function turnResourceId(spaceId: string, sessionId: string, turnId: string): RemoteResourceId {
+  return JSON.stringify([spaceId, sessionId, turnId]) as RemoteResourceId
 }
 
 function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -115,7 +133,7 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
           id: space.id as RemoteResourceId,
           title: space.title,
           marker: Object.freeze({ kind: 'cloud' as const, label: 'Cohub' }),
-          capabilities: Object.freeze({ browse: true as const, read: false, write: false }),
+          capabilities: Object.freeze({ browse: true as const, read: false, write: false, conversation: true }),
         })
       })
       this.publish(Object.freeze({ status: 'ready', roots: Object.freeze(roots) }))
@@ -143,6 +161,55 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
         kind: 'session' as const,
         revision: session.updatedAt,
       }))),
+    })
+  }
+
+  async readConversation(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationView> {
+    if (request.sessionId === undefined) {
+      return Object.freeze({ rootId: request.rootId, turns: Object.freeze([]) })
+    }
+    const rawSessionId = sessionId(request.rootId, request.sessionId)
+    const value = await abortable(this.remote.getConversation(request.rootId, rawSessionId), request.signal)
+    if (value.spaceId !== request.rootId || value.session.id !== rawSessionId) {
+      throw new TypeError('client-cohub-spaces: conversation does not match the requested Session')
+    }
+    return Object.freeze({
+      rootId: request.rootId,
+      session: Object.freeze({ id: request.sessionId, title: value.session.title, status: value.session.status }),
+      turns: Object.freeze(value.turns.map(turn => Object.freeze({
+        id: turnResourceId(value.spaceId, rawSessionId, turn.id),
+        sequence: turn.sequence,
+        status: turn.status,
+        ...turn.userText === undefined ? {} : { userText: turn.userText },
+        ...turn.assistantText === undefined ? {} : { assistantText: turn.assistantText },
+        ...turn.errorMessage === undefined ? {} : { errorMessage: turn.errorMessage },
+        updatedAt: turn.updatedAt,
+      }))),
+    })
+  }
+
+  async promptConversation(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly text: string
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationPromptResult> {
+    const rawSessionId = request.sessionId === undefined ? undefined : sessionId(request.rootId, request.sessionId)
+    const value = await abortable(
+      this.remote.promptConversation(request.rootId, rawSessionId, request.text),
+      request.signal,
+    )
+    if (value.spaceId !== request.rootId) throw new TypeError('client-cohub-spaces: prompt result does not match the requested Space')
+    return Object.freeze({
+      rootId: request.rootId,
+      sessionId: resourceId(value.spaceId, value.sessionId),
+      sessionTitle: value.sessionTitle,
+      turnId: turnResourceId(value.spaceId, value.sessionId, value.turnId),
+      turnStatus: value.turnStatus,
     })
   }
 
@@ -176,6 +243,10 @@ export function apply(ctx: ClientContext): () => void {
     listSpaces: async () => unwrapRemote('cohubSpaces.listSpaces', await carrier.listSpaces()),
     listSessions: async spaceId =>
       unwrapRemote('cohubSpaces.listSessions', await carrier.listSessions(spaceId)),
+    getConversation: async (spaceId, sessionId) =>
+      unwrapRemote('cohubSpaces.getConversation', await carrier.getConversation(spaceId, sessionId)),
+    promptConversation: async (spaceId, sessionId, text) =>
+      unwrapRemote('cohubSpaces.promptConversation', await carrier.promptConversation(spaceId, sessionId, text)),
   })
   const unregister = ctx.remoteRoots.register(source)
   let off: (() => void) | undefined

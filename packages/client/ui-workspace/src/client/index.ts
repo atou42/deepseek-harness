@@ -12,6 +12,9 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {
+  RemoteRootsServiceContract, RemoteRootsSnapshot,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
@@ -44,6 +47,33 @@ const NS = 'workspace'
  */
 export const inject = ['slots', 'sessions', 'workspaces', 'locale']
 
+const EMPTY_REMOTE_ROOTS: RemoteRootsSnapshot = Object.freeze({ revision: 0, sources: Object.freeze([]) })
+
+/** Optional remote-root source: local-only compositions keep the picker fully functional. */
+function optionalRemoteRoots(ctx: ClientContext): HostObservable<RemoteRootsSnapshot> {
+  let source: HostObservable<RemoteRootsSnapshot> | undefined
+  let unsubscribe: (() => void) | undefined
+  const listeners = new Set<() => void>()
+  ctx.inject(['remoteRoots'], (scope: ClientContext) => {
+    source = scope.remoteRoots.snapshot
+    unsubscribe = source.subscribe(() => { for (const listener of [...listeners]) listener() })
+    for (const listener of [...listeners]) listener()
+    return () => {
+      unsubscribe?.()
+      unsubscribe = undefined
+      source = undefined
+      for (const listener of [...listeners]) listener()
+    }
+  })
+  return {
+    getSnapshot: () => source?.getSnapshot() ?? EMPTY_REMOTE_ROOTS,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
+}
+
 /**
  * Register the browser and picker once their slot declarations are on the
  * ledger. Inject factories return plain callbacks; data reads use the
@@ -67,6 +97,12 @@ export function apply(ctx: ClientContext): void {
   })
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
+  const remoteRootsSource = optionalRemoteRoots(ctx)
+  const activateRemote = (sourceId: Parameters<RemoteRootsServiceContract['activate']>[0], rootId: Parameters<RemoteRootsServiceContract['activate']>[1]): void => {
+    const service = ctx.get('remoteRoots')
+    if (service === undefined) throw new Error('ui-workspace: remote roots are unavailable')
+    service.activate(sourceId, rootId)
+  }
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
@@ -99,11 +135,13 @@ export function apply(ctx: ClientContext): void {
       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     },
     createWorkspace: input => ctx.workspaces.create(input),
-    hooks: { directoryFlow: browserFlowSource },
+    activateRemote,
+    hooks: { directoryFlow: browserFlowSource, remoteRoots: remoteRootsSource },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => ctx.workspaces.create(input),
-    hooks: { directoryFlow: pickerFlowSource },
+    activateRemote,
+    hooks: { directoryFlow: pickerFlowSource, remoteRoots: remoteRootsSource },
   })
   // Each registration declares its directory-flow child in the same call;
   // slot injection follows both the owner and declaration HMR lifetimes.

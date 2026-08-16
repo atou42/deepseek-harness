@@ -2,18 +2,18 @@
 
 English | [中文](README.zh.md)
 
-Anonymous, provider-neutral remote-root tree for DSH. It renders marked remote roots beside local Workspaces and supports folder, file, link, and Session rows while keeping every identity opaque. It never creates a Workspace, cwd, local path, Shell target, account, or credential.
+Anonymous, provider-neutral remote-root and conversation UI for DSH. It renders marked remote roots beside local Workspaces, opens provider-owned Session rows, and hosts a remote conversation workbench while keeping every identity opaque. It never creates a local Workspace, cwd, local path, Shell target, account, or credential.
 
-Providers register data and operations through `@deepseek-ai/dsh-client-remote-roots`. This package only owns presentation, lazy listing, cancellation, retry, and slot disposal. Removing it leaves provider registration intact; removing a provider withdraws its roots without changing local Workspace state.
+Providers register data and operations through `@deepseek-ai/dsh-client-remote-roots`. This package owns presentation, lazy listing, Session selection, history rendering, prompt submission, active-Turn refresh, cancellation, retry, and slot disposal. Removing it leaves provider registration intact; removing a provider withdraws its roots without changing local Workspace state.
 
 ## Model Experience
 
-None, as this package is browser presentation and sends no model input.
+Prompts entered in the remote workbench are sent to the selected provider-owned Session. The provider remains responsible for model choice, context, tools, and persistence.
 
 #### KV Cache effect
 
-None; it neither assembles nor sends a provider request.
+Provider-dependent. This package does not assemble model context itself.
 
 ## Known Limitations and Deferred Work
 
-- The tree is deliberately browse-only. Opening a Session history and other provider-specific actions remain outside this anonymous presentation package.
+- Turn updates currently use short polling after prompt acceptance. Provider event streaming and detailed tool-progress projection remain deferred.

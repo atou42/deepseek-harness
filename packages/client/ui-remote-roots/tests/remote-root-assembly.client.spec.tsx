@@ -102,6 +102,15 @@ describe('remote roots through the assembled Workspace browser', () => {
           updatedAt: '2026-08-16T10:00:00.000Z',
         }],
       })),
+      getConversation: vi.fn(async () => ({
+        spaceId: 'space-1',
+        session: {
+          id: 'session-1', spaceId: 'space-1', title: '把 Cohub Session 接进 DSH', status: 'active',
+          latestMessageText: '继续实现', updatedAt: '2026-08-16T10:00:00.000Z',
+        },
+        turns: [],
+      })),
+      promptConversation: vi.fn(),
     })
     const service = runtime.ctx.get('remoteRoots') as RemoteRootsService
     const disposeProvider = service.register(source)

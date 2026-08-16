@@ -1,6 +1,7 @@
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
+  RemoteConversationPromptResult, RemoteConversationTarget, RemoteConversationView,
   RemoteDirectoryListing, RemoteResourceId, RemoteRootSource, RemoteRootSourceId,
   RemoteRootSourceSnapshot, RemoteRootsSnapshot, RemoteTextFile, RemoteTextWriteResult,
 } from '../types.ts'
@@ -44,6 +45,9 @@ function cloneRoot(sourceId: string, value: unknown): RemoteRootsSnapshot['sourc
   if (capabilities.browse !== true) throw new TypeError(`remote-roots: source "${sourceId}" capability browse must be true`)
   if (typeof capabilities.read !== 'boolean') throw new TypeError(`remote-roots: source "${sourceId}" capability read must be a boolean`)
   if (typeof capabilities.write !== 'boolean') throw new TypeError(`remote-roots: source "${sourceId}" capability write must be a boolean`)
+  if (capabilities.conversation !== undefined && typeof capabilities.conversation !== 'boolean') {
+    throw new TypeError(`remote-roots: source "${sourceId}" capability conversation must be a boolean`)
+  }
   return Object.freeze({
     id: nonBlank(root.id, `source "${sourceId}" root id`) as RemoteResourceId,
     title: nonBlank(root.title, `source "${sourceId}" root title`),
@@ -55,7 +59,82 @@ function cloneRoot(sourceId: string, value: unknown): RemoteRootsSnapshot['sourc
       browse: true,
       read: capabilities.read,
       write: capabilities.write,
+      ...capabilities.conversation === undefined ? {} : { conversation: capabilities.conversation },
     }),
+  })
+}
+
+function validateConversation(
+  value: unknown,
+  request: { readonly rootId: RemoteResourceId; readonly sessionId?: RemoteResourceId },
+): RemoteConversationView {
+  const conversation = record(value, 'conversation result')
+  if (conversation.rootId !== request.rootId) throw new TypeError('remote-roots: conversation result rootId does not match request')
+  if (!Array.isArray(conversation.turns)) throw new TypeError('remote-roots: conversation result turns must be an array')
+  let session: RemoteConversationView['session']
+  if (conversation.session !== undefined) {
+    const item = record(conversation.session, 'conversation result session')
+    const id = nonBlank(item.id, 'conversation result session id') as RemoteResourceId
+    if (request.sessionId !== undefined && id !== request.sessionId) {
+      throw new TypeError('remote-roots: conversation result session id does not match request')
+    }
+    session = Object.freeze({
+      id,
+      title: nonBlank(item.title, 'conversation result session title'),
+      status: nonBlank(item.status, 'conversation result session status'),
+    })
+  } else if (request.sessionId !== undefined) {
+    throw new TypeError('remote-roots: conversation result omitted the requested session')
+  }
+  const ids = new Set<string>()
+  const turns = conversation.turns.map((value, index) => {
+    const turn = record(value, `conversation turn ${String(index)}`)
+    const id = nonBlank(turn.id, `conversation turn ${String(index)} id`) as RemoteResourceId
+    if (ids.has(id)) throw new TypeError(`remote-roots: conversation result repeats turn "${id}"`)
+    ids.add(id)
+    if (!Number.isSafeInteger(turn.sequence) || (turn.sequence as number) < 0) {
+      throw new TypeError(`remote-roots: conversation turn "${id}" sequence must be a non-negative safe integer`)
+    }
+    const optional = (item: unknown, field: string): string | undefined => {
+      if (item === undefined) return undefined
+      if (typeof item !== 'string') throw new TypeError(`remote-roots: ${field} must be a string`)
+      return item
+    }
+    const userText = optional(turn.userText, `conversation turn "${id}" userText`)
+    const assistantText = optional(turn.assistantText, `conversation turn "${id}" assistantText`)
+    const errorMessage = optional(turn.errorMessage, `conversation turn "${id}" errorMessage`)
+    const updatedAt = nonBlank(turn.updatedAt, `conversation turn "${id}" updatedAt`)
+    if (!Number.isFinite(Date.parse(updatedAt))) throw new TypeError(`remote-roots: conversation turn "${id}" updatedAt is invalid`)
+    return Object.freeze({
+      id,
+      sequence: turn.sequence as number,
+      status: nonBlank(turn.status, `conversation turn "${id}" status`),
+      ...userText === undefined ? {} : { userText },
+      ...assistantText === undefined ? {} : { assistantText },
+      ...errorMessage === undefined ? {} : { errorMessage },
+      updatedAt,
+    })
+  })
+  turns.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
+  return Object.freeze({
+    rootId: request.rootId,
+    ...session === undefined ? {} : { session },
+    turns: Object.freeze(turns),
+  })
+}
+
+function validatePromptResult(
+  value: unknown,
+  rootId: RemoteResourceId,
+): RemoteConversationPromptResult {
+  const result = record(value, 'conversation prompt result')
+  if (result.rootId !== rootId) throw new TypeError('remote-roots: conversation prompt result rootId does not match request')
+  return Object.freeze({
+    rootId,
+    sessionId: nonBlank(result.sessionId, 'conversation prompt result sessionId') as RemoteResourceId,
+    sessionTitle: nonBlank(result.sessionTitle, 'conversation prompt result sessionTitle'),
+    turnId: nonBlank(result.turnId, 'conversation prompt result turnId') as RemoteResourceId,
+    turnStatus: nonBlank(result.turnStatus, 'conversation prompt result turnStatus'),
   })
 }
 
@@ -166,6 +245,7 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
   private readonly listeners = new Set<() => void>()
   private revision = 0
   private current: RemoteRootsSnapshot = Object.freeze({ revision: 0, sources: Object.freeze([]) })
+  private active: RemoteConversationTarget | undefined
   private currentFailure: { readonly error: unknown } | undefined
   readonly snapshot = {
     getSnapshot: (): RemoteRootsSnapshot => {
@@ -250,10 +330,82 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
     return validateWriteResult(await source.write(request), request)
   }
 
+  /** Select a provider-owned Space or Session for the remote workbench. */
+  activate(sourceId: RemoteRootSourceId, rootId: RemoteResourceId, sessionId?: RemoteResourceId, sessionTitle?: string): void {
+    nonBlank(rootId, 'activate rootId')
+    if (sessionId !== undefined) nonBlank(sessionId, 'activate sessionId')
+    const source = this.requireSource(sourceId)
+    if (source.readConversation === undefined || source.promptConversation === undefined) {
+      throw new Error(`remote-roots: source "${sourceId}" does not support conversations`)
+    }
+    const published = this.current.sources.find(item => item.sourceId === sourceId)
+    const root = published?.status === 'ready' ? published.roots.find(item => item.id === rootId) : undefined
+    if (root === undefined || root.capabilities.conversation !== true) {
+      throw new Error(`remote-roots: source "${sourceId}" has no conversational root "${rootId}"`)
+    }
+    this.active = Object.freeze({
+      sourceId,
+      rootId,
+      rootTitle: root.title,
+      ...sessionId === undefined ? {} : { sessionId },
+      ...sessionTitle === undefined ? {} : { sessionTitle: nonBlank(sessionTitle, 'activate sessionTitle') },
+    })
+    this.publish()
+  }
+
+  /** Close the remote workbench without changing provider state. */
+  deactivate(): void {
+    if (this.active === undefined) return
+    this.active = undefined
+    this.publish()
+  }
+
+  async readConversation(sourceId: RemoteRootSourceId, request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationView> {
+    nonBlank(request.rootId, 'conversation request rootId')
+    if (request.sessionId !== undefined) nonBlank(request.sessionId, 'conversation request sessionId')
+    const source = this.requireSource(sourceId)
+    if (source.readConversation === undefined) throw new Error(`remote-roots: source "${sourceId}" does not support conversations`)
+    return validateConversation(await source.readConversation(request), request)
+  }
+
+  async promptConversation(sourceId: RemoteRootSourceId, request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly text: string
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationPromptResult> {
+    nonBlank(request.rootId, 'conversation prompt rootId')
+    if (request.sessionId !== undefined) nonBlank(request.sessionId, 'conversation prompt sessionId')
+    nonBlank(request.text, 'conversation prompt text')
+    const source = this.requireSource(sourceId)
+    if (source.promptConversation === undefined) throw new Error(`remote-roots: source "${sourceId}" does not support conversations`)
+    const result = validatePromptResult(await source.promptConversation(request), request.rootId)
+    this.active = Object.freeze({
+      sourceId,
+      rootId: request.rootId,
+      rootTitle: this.requireRootTitle(sourceId, request.rootId),
+      sessionId: result.sessionId,
+      sessionTitle: result.sessionTitle,
+    })
+    this.publish()
+    return result
+  }
+
   private requireSource(sourceId: RemoteRootSourceId): RemoteRootSource {
     const source = this.sources.get(sourceId)?.source
     if (source === undefined) throw new Error(`remote-roots: unknown source "${sourceId}"`)
     return source
+  }
+
+  private requireRootTitle(sourceId: RemoteRootSourceId, rootId: RemoteResourceId): string {
+    const source = this.current.sources.find(item => item.sourceId === sourceId)
+    const root = source?.status === 'ready' ? source.roots.find(item => item.id === rootId) : undefined
+    if (root === undefined) throw new Error(`remote-roots: source "${sourceId}" has no root "${rootId}"`)
+    return root.title
   }
 
   private publish(): void {
@@ -270,7 +422,16 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
       })
       Object.freeze(sources)
       this.revision++
-      this.current = Object.freeze({ revision: this.revision, sources })
+      if (this.active !== undefined) {
+        const source = sources.find(item => item.sourceId === this.active?.sourceId)
+        const root = source?.status === 'ready' ? source.roots.find(item => item.id === this.active?.rootId) : undefined
+        if (root === undefined || root.capabilities.conversation !== true) this.active = undefined
+      }
+      this.current = Object.freeze({
+        revision: this.revision,
+        sources,
+        ...this.active === undefined ? {} : { active: this.active },
+      })
       this.currentFailure = undefined
     } catch (error) {
       this.currentFailure = { error }
