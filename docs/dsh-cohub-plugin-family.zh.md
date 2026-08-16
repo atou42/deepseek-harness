@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 通用远程文件夹 | — | `@deepseek-ai/dsh-client-remote-roots` 和 `@deepseek-ai/dsh-client-ui-remote-roots` | 不需要 |
 | Cohub 账号 | `@deepseek-ai/dsh-cohub-account` | `@deepseek-ai/dsh-client-cohub-account` | Host 持有身份，浏览器只接收不含令牌的状态 |
-| Space 文件 | `@deepseek-ai/dsh-cohub-spaces` | `@deepseek-ai/dsh-client-cohub-spaces` | 需要 |
+| Space 与 Session | `@deepseek-ai/dsh-cohub-spaces` | `@deepseek-ai/dsh-client-cohub-spaces` | 需要 |
 | 生成式模型 | `@deepseek-ai/dsh-llm-cohub` | 使用 DSH 现有模型界面 | 需要 |
 | 多媒体生成 | `@deepseek-ai/dsh-cohub-generation` | 使用 DSH 现有工具界面 | 需要 |
 | Board | `@deepseek-ai/dsh-cohub-board` | `@deepseek-ai/dsh-client-cohub-board` | 需要 |
@@ -33,11 +33,11 @@
 
 在 Host 加载 Cohub Account，并按需加载浏览器账号界面。它提供设备登录和退出，但不会自行启用 Space、模型、生成或 Board。
 
-### 把 Cohub Space 显示为云文件夹
+### 显示 Cohub Space 与云端 Session
 
-加载 Cohub Account、Cohub Spaces、通用远程文件夹注册服务与界面，以及 Cohub Spaces 浏览器 Provider。每个可访问的 Space 都显示成带 `Cohub` 标识的文件夹根节点。
+加载 Cohub Account、Cohub Spaces、通用远程根注册服务与界面，以及 Cohub Spaces 浏览器 Provider。每个可访问的 Space 都显示成带 `Cohub` 标识的根节点；展开后显示该 Space 的 Session，而不是文件。
 
-Space 根节点不会进入 DSH 本地 Workspace。展开它不会改变 Session 工作目录，不会虚构本地路径，不会改变 Shell 行为，也不会启动 Cohub Session。接口只传递不透明的 Space 相对身份。
+Space 根节点不会进入 DSH 本地 Workspace。展开它不会改变 Session 工作目录，不会虚构本地路径，不会改变 Shell 行为，也不会启动 Cohub Session。接口只传递不透明的 Space 与 Session 身份。打开 Session 历史属于下一层会话适配，不是文件浏览。
 
 ### 模型、生成和 Board
 

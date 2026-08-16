@@ -59,14 +59,53 @@ afterEach(async () => {
 })
 
 describe('CohubSpacesGateway', () => {
-  it('exposes the four Space/files Remote methods', async () => {
+  it('exposes the Space, Session, and file Remote methods', async () => {
     const { spaces } = await boot()
     expect(spaces.typertRemote).toMatchObject({ serviceKey: 'cohubSpaces', namespace: 'cohubSpaces' })
     expect(remoteMethods(spaces)).toEqual([
       { method: 'listSpaces', invocation: { kind: 'direct' } },
+      { method: 'listSessions', invocation: { kind: 'direct' } },
       { method: 'listDirectory', invocation: { kind: 'direct' } },
       { method: 'readText', invocation: { kind: 'direct' } },
       { method: 'writeText', invocation: { kind: 'direct' } },
+    ])
+  })
+
+  it('lists every Session page for one Space without exposing files', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({
+        sessions: [{
+          id: 'session-1', spaceId: 'space-1', title: 'First conversation', status: 'active',
+          latestMessageText: 'latest answer', updatedAt: '2026-08-16T10:00:00.000Z',
+        }],
+        pageInfo: { hasMore: true, nextCursor: 'cursor-2' },
+      }))
+      .mockResolvedValueOnce(json({
+        sessions: [{
+          id: 'session-2', spaceId: 'space-1', title: 'Second conversation', status: 'active',
+          latestMessageText: null, updatedAt: '2026-08-16T09:00:00.000Z',
+        }],
+        pageInfo: { hasMore: false, nextCursor: null },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces } = await boot()
+
+    await expect(spaces.listSessions('space-1')).resolves.toEqual({
+      spaceId: 'space-1',
+      sessions: [
+        {
+          id: 'session-1', spaceId: 'space-1', title: 'First conversation', status: 'active',
+          latestMessageText: 'latest answer', updatedAt: '2026-08-16T10:00:00.000Z',
+        },
+        {
+          id: 'session-2', spaceId: 'space-1', title: 'Second conversation', status: 'active',
+          updatedAt: '2026-08-16T09:00:00.000Z',
+        },
+      ],
+    })
+    expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://cohub.example.test/api/spaces/space-1/sessions?limit=100',
+      'https://cohub.example.test/api/spaces/space-1/sessions?limit=100&cursor=cursor-2',
     ])
   })
 

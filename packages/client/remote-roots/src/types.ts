@@ -51,7 +51,7 @@ export interface RemoteResourceEntry {
   readonly id: RemoteResourceId
   readonly parentId: RemoteResourceId
   readonly name: string
-  readonly kind: 'folder' | 'file' | 'link'
+  readonly kind: 'folder' | 'file' | 'link' | 'session'
   readonly revision?: string
   readonly size?: number
 }
@@ -104,4 +104,3 @@ export interface RemoteRootSource {
     readonly signal?: AbortSignal
   }): Promise<RemoteTextWriteResult>
 }
-

@@ -16,12 +16,7 @@ function remote(overrides: Partial<CohubSpacesRemoteApi> = {}): CohubSpacesRemot
       profile: { userId: 'user-1' }, accessTokenExpiresAt: Date.now() + 60_000,
     })),
     listSpaces: vi.fn(async () => []),
-    listDirectory: vi.fn(async (spaceId: string, path: string) => ({ spaceId, path, entries: [] })),
-    readText: vi.fn(async (spaceId: string, path: string) => ({ spaceId, path, content: '', revision: '1:0' })),
-    writeText: vi.fn(async (spaceId: string, path: string, content: string) => ({
-      ok: true as const,
-      value: { spaceId, path, content, revision: '2:0' },
-    })),
+    listSessions: vi.fn(async (spaceId: string) => ({ spaceId, sessions: [] })),
     ...overrides,
   }
 }
@@ -53,11 +48,11 @@ describe('CohubSpacesRemoteRootSource', () => {
         roots: [
           {
             id: 'space-1', title: 'World Bible', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: true, write: true },
+            capabilities: { browse: true, read: false, write: false },
           },
           {
             id: 'space-2', title: 'Drafts', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: true, write: true },
+            capabilities: { browse: true, read: false, write: false },
           },
         ],
       }],
@@ -68,75 +63,41 @@ describe('CohubSpacesRemoteRootSource', () => {
     await ctx.fiber.dispose()
   })
 
-  it('maps opaque identities without turning Space paths into local paths', async () => {
-    const listDirectory = vi.fn(async (spaceId: string, path: string) => ({
+  it('shows Cohub Sessions under each Space instead of Space files', async () => {
+    const listSessions = vi.fn(async (spaceId: string) => ({
       spaceId,
-      path,
-      entries: [
-        { path: 'wiki/characters', name: 'characters', kind: 'folder' as const, size: 0, revision: '10:0' },
-        { path: 'wiki/index.md', name: 'index.md', kind: 'file' as const, size: 12, revision: '11:12' },
-        { path: 'wiki/latest', name: 'latest', kind: 'link' as const, size: 8, revision: '12:8' },
+      sessions: [
+        {
+          id: 'session-1', spaceId, title: 'First conversation', status: 'active',
+          latestMessageText: 'latest answer', updatedAt: '2026-08-16T10:00:00.000Z',
+        },
+        {
+          id: 'session-2', spaceId, title: 'Second conversation', status: 'active',
+          updatedAt: '2026-08-16T09:00:00.000Z',
+        },
       ],
     }))
-    const api = remote({
-      listDirectory,
-    })
+    const api = remote({ listSessions })
     const source = new CohubSpacesRemoteRootSource(api)
     const rootId = 'space-1' as RemoteResourceId
-    const wikiId = JSON.stringify(['space-1', 'wiki']) as RemoteResourceId
-    const listing = await source.list({ rootId, parentId: wikiId })
+    const listing = await source.list({ rootId, parentId: rootId })
 
-    expect(listDirectory).toHaveBeenCalledWith('space-1', 'wiki')
+    expect(listSessions).toHaveBeenCalledWith('space-1')
     expect(listing).toEqual({
       rootId,
-      parentId: wikiId,
+      parentId: rootId,
       entries: [
         {
-          id: JSON.stringify(['space-1', 'wiki/characters']), parentId: wikiId,
-          name: 'characters', kind: 'folder', size: 0, revision: '10:0',
+          id: JSON.stringify(['space-1', 'session-1']), parentId: rootId,
+          name: 'First conversation', kind: 'session', revision: '2026-08-16T10:00:00.000Z',
         },
         {
-          id: JSON.stringify(['space-1', 'wiki/index.md']), parentId: wikiId,
-          name: 'index.md', kind: 'file', size: 12, revision: '11:12',
-        },
-        {
-          id: JSON.stringify(['space-1', 'wiki/latest']), parentId: wikiId,
-          name: 'latest', kind: 'link', size: 8, revision: '12:8',
+          id: JSON.stringify(['space-1', 'session-2']), parentId: rootId,
+          name: 'Second conversation', kind: 'session', revision: '2026-08-16T09:00:00.000Z',
         },
       ],
     })
     expect(JSON.stringify(listing)).not.toContain('/workspace')
-    source.dispose()
-  })
-
-  it('routes text reads and conflict-preserving writes through the Host adapter', async () => {
-    const writeText = vi.fn(async (spaceId: string, path: string) => ({
-      ok: false as const,
-      error: {
-        code: 'version-conflict' as const,
-        current: { spaceId, path, content: 'current', revision: '21:7' },
-      },
-    }))
-    const api = remote({
-      readText: vi.fn(async (spaceId: string, path: string) => ({
-        spaceId, path, content: 'hello', revision: '20:5',
-      })),
-      writeText,
-    })
-    const source = new CohubSpacesRemoteRootSource(api)
-    const rootId = 'space-1' as RemoteResourceId
-    const fileId = JSON.stringify(['space-1', 'wiki/index.md']) as RemoteResourceId
-
-    await expect(source.read({ rootId, fileId })).resolves.toEqual({
-      rootId, fileId, content: 'hello', revision: '20:5',
-    })
-    await expect(source.write({
-      rootId, fileId, content: 'mine', ifRevision: '20:5',
-    })).resolves.toEqual({
-      ok: false,
-      error: { code: 'version-conflict', current: { rootId, fileId, content: 'current', revision: '21:7' } },
-    })
-    expect(writeText).toHaveBeenCalledWith('space-1', 'wiki/index.md', 'mine', '20:5')
     source.dispose()
   })
 
@@ -179,20 +140,19 @@ describe('CohubSpacesRemoteRootSource', () => {
   })
 
   it('rejects an aborted operation while safely observing its late Remote result', async () => {
-    let resolve!: (value: { spaceId: string; path: string; content: string; revision: string }) => void
+    let resolve!: (value: { spaceId: string; sessions: readonly [] }) => void
     const api = remote({
-      readText: vi.fn(() => new Promise<{ spaceId: string; path: string; content: string; revision: string }>(
+      listSessions: vi.fn(() => new Promise<{ spaceId: string; sessions: readonly [] }>(
         (done) => { resolve = done },
       )),
     })
     const source = new CohubSpacesRemoteRootSource(api)
     const controller = new AbortController()
     const rootId = 'space-1' as RemoteResourceId
-    const fileId = JSON.stringify(['space-1', 'wiki/index.md']) as RemoteResourceId
-    const pending = source.read({ rootId, fileId, signal: controller.signal })
-    controller.abort(new Error('closed editor'))
-    await expect(pending).rejects.toThrow('closed editor')
-    resolve({ spaceId: 'space-1', path: 'wiki/index.md', content: 'late', revision: '1:4' })
+    const pending = source.list({ rootId, parentId: rootId, signal: controller.signal })
+    controller.abort(new Error('closed Space'))
+    await expect(pending).rejects.toThrow('closed Space')
+    resolve({ spaceId: 'space-1', sessions: [] })
     await Promise.resolve()
     source.dispose()
   })
@@ -223,9 +183,7 @@ describe('CohubSpacesRemoteRootSource', () => {
         cohubAccount: { getAccount },
         cohubSpaces: {
           listSpaces,
-          listDirectory: vi.fn(),
-          readText: vi.fn(),
-          writeText: vi.fn(),
+          listSessions: vi.fn(),
         },
         $on: vi.fn((_event, listener: () => void) => { changed = listener; return off }),
       },

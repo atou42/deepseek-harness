@@ -10,9 +10,11 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   CohubSpaceDirectory,
   CohubSpaceEntry,
+  CohubSpaceSessionList,
   CohubSpaceTextFile,
   CohubSpaceView,
   CohubSpaceWriteResult,
+  CohubSessionView,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -148,6 +150,50 @@ function parseSpaces(value: unknown): readonly CohubSpaceView[] {
   }))
 }
 
+interface SessionPage {
+  readonly sessions: readonly CohubSessionView[]
+  readonly hasMore: boolean
+  readonly nextCursor?: string
+}
+
+function isoInstant(value: unknown, field: string): string {
+  const instant = nonBlank(value, field)
+  if (!Number.isFinite(Date.parse(instant))) throw new TypeError(`cohub-spaces: ${field} must be an ISO-8601 instant`)
+  return instant
+}
+
+function parseSessionPage(value: unknown, spaceId: string): SessionPage {
+  const body = record(value, 'sessions response')
+  if (!Array.isArray(body.sessions)) throw new TypeError('cohub-spaces: sessions response sessions must be an array')
+  const pageInfo = record(body.pageInfo, 'sessions response pageInfo')
+  if (typeof pageInfo.hasMore !== 'boolean') {
+    throw new TypeError('cohub-spaces: sessions response pageInfo.hasMore must be a boolean')
+  }
+  const nextCursor = pageInfo.hasMore
+    ? nonBlank(pageInfo.nextCursor, 'sessions response pageInfo.nextCursor')
+    : undefined
+  const sessions = body.sessions.map((item, index) => {
+    const session = record(item, `session ${String(index)}`)
+    const id = nonBlank(session.id, `session ${String(index)} id`)
+    if (session.spaceId !== spaceId) {
+      throw new TypeError(`cohub-spaces: session "${id}" does not belong to Space "${spaceId}"`)
+    }
+    const latestMessageText = session.latestMessageText
+    if (latestMessageText !== undefined && latestMessageText !== null && typeof latestMessageText !== 'string') {
+      throw new TypeError(`cohub-spaces: session "${id}" latestMessageText must be a string or null`)
+    }
+    return Object.freeze({
+      id,
+      spaceId,
+      title: nonBlank(session.title, `session "${id}" title`),
+      status: nonBlank(session.status, `session "${id}" status`),
+      ...typeof latestMessageText === 'string' ? { latestMessageText } : {},
+      updatedAt: isoInstant(session.updatedAt, `session "${id}" updatedAt`),
+    })
+  })
+  return Object.freeze({ sessions: Object.freeze(sessions), hasMore: pageInfo.hasMore, ...nextCursor ? { nextCursor } : {} })
+}
+
 function parseEntry(value: unknown, requestedPath: string, index: number): CohubSpaceEntry {
   const entry = record(value, `tree entry ${String(index)}`)
   const path = spacePath(entry.path, `tree entry ${String(index)} path`, false)
@@ -266,6 +312,12 @@ export class CohubSpacesGateway extends TypertRemoteService {
     return this.track(this.listSpacesImpl())
   }
 
+  /** List every conversation in one Space, following the platform cursor. */
+  @Remote('listSessions')
+  listSessions(spaceId: string): Promise<CohubSpaceSessionList> {
+    return this.track(this.listSessionsImpl(spaceId))
+  }
+
   /** List one exact Space-relative directory. */
   @Remote('listDirectory')
   listDirectory(spaceId: string, path: string): Promise<CohubSpaceDirectory> {
@@ -287,6 +339,36 @@ export class CohubSpacesGateway extends TypertRemoteService {
   private async listSpacesImpl(): Promise<readonly CohubSpaceView[]> {
     const { data } = await this.request('/api/spaces')
     return parseSpaces(data)
+  }
+
+  private async listSessionsImpl(spaceIdValue: string): Promise<CohubSpaceSessionList> {
+    const spaceId = nonBlank(spaceIdValue, 'spaceId')
+    const token = await this.ctx.cohubAccount.getAccessToken()
+    const sessions: CohubSessionView[] = []
+    const ids = new Set<string>()
+    const cursors = new Set<string>()
+    let cursor: string | undefined
+    do {
+      const params = new URLSearchParams({ limit: '100' })
+      if (cursor !== undefined) params.set('cursor', cursor)
+      const { data } = await this.requestWithToken(
+        `/api/spaces/${encodeURIComponent(spaceId)}/sessions?${params.toString()}`,
+        token,
+      )
+      const page = parseSessionPage(data, spaceId)
+      for (const session of page.sessions) {
+        if (ids.has(session.id)) throw new TypeError(`cohub-spaces: duplicate session id "${session.id}"`)
+        ids.add(session.id)
+        sessions.push(session)
+      }
+      if (!page.hasMore) break
+      cursor = page.nextCursor
+      if (cursor === undefined || cursors.has(cursor)) {
+        throw new TypeError('cohub-spaces: sessions response cursor did not advance')
+      }
+      cursors.add(cursor)
+    } while (true)
+    return Object.freeze({ spaceId, sessions: Object.freeze(sessions) })
   }
 
   private async listDirectoryImpl(spaceIdValue: string, pathValue: string): Promise<CohubSpaceDirectory> {

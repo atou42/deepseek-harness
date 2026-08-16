@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/dsh-cohub-plugin-family.md
-dsh-cohub-plugin-family.md: 21c36d60b3626b669774b4c278e9ac5b2746945c
-dsh-cohub-plugin-family.zh.md: 6bcdf0a2a86a4064835326f2a46b840ed1398d00
+dsh-cohub-plugin-family.md: 63030389c847dc83210b2c89f89f9161130f23dd
+dsh-cohub-plugin-family.zh.md: ae11cda39336702ff1c641649d02c5dffec6b5e8

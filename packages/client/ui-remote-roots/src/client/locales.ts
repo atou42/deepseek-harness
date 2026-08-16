@@ -14,6 +14,7 @@ export const zh = {
   'collapse': '收起 {name}',
   'file': '文件 {name}',
   'link': '链接 {name}',
+  'session': '会话 {name}',
 } as const
 
 export type RemoteRootsKey = keyof typeof zh
@@ -32,4 +33,5 @@ export const en: Record<RemoteRootsKey, string> = {
   'collapse': 'Collapse {name}',
   'file': 'File {name}',
   'link': 'Link {name}',
+  'session': 'Session {name}',
 }

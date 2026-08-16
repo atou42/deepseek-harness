@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16,
+  IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16, IconNewChatOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   RemoteDirectoryListing, RemoteResourceEntry, RemoteResourceId, RemoteRootSourceId, RemoteRootView,
@@ -24,12 +24,14 @@ function LeafRow({ entry, depth, t }: { entry: RemoteResourceEntry; depth: numbe
     <div
       className={css.row}
       role="treeitem"
-      aria-label={t(entry.kind === 'link' ? 'link' : 'file', { name: entry.name })}
+      aria-label={t(entry.kind === 'session' ? 'session' : entry.kind === 'link' ? 'link' : 'file', { name: entry.name })}
       style={{ paddingInlineStart: `${8 + depth * 16}px` }}
       data-remote-resource-id={entry.id}
     >
       <span className={css.chevronSpacer} />
-      <span className={css.fileIcon} aria-hidden="true" />
+      {entry.kind === 'session'
+        ? <IconNewChatOutline16 size={14} className={css.fileIcon} />
+        : <span className={css.fileIcon} aria-hidden="true" />}
       <span className={css.name}>{entry.name}</span>
     </div>
   )

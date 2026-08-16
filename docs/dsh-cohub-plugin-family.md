@@ -16,7 +16,7 @@ The browser account surface is optional. Removing it removes the sign-in interfa
 | --- | --- | --- | --- |
 | Generic remote folders | — | `@deepseek-ai/dsh-client-remote-roots` and `@deepseek-ai/dsh-client-ui-remote-roots` | Not required |
 | Cohub account | `@deepseek-ai/dsh-cohub-account` | `@deepseek-ai/dsh-client-cohub-account` | Host owns identity; browser receives token-free state |
-| Space files | `@deepseek-ai/dsh-cohub-spaces` | `@deepseek-ai/dsh-client-cohub-spaces` | Required |
+| Spaces and Sessions | `@deepseek-ai/dsh-cohub-spaces` | `@deepseek-ai/dsh-client-cohub-spaces` | Required |
 | Generative models | `@deepseek-ai/dsh-llm-cohub` | Existing DSH model surfaces | Required |
 | Multimedia generation | `@deepseek-ai/dsh-cohub-generation` | Existing DSH tool surfaces | Required |
 | Board | `@deepseek-ai/dsh-cohub-board` | `@deepseek-ai/dsh-client-cohub-board` | Required |
@@ -33,11 +33,11 @@ Load the generic remote-root registry and UI. Provider packages may contribute c
 
 Load Cohub Account on the Host and optionally its browser UI. This enables device login and logout, but no Space, model, generation, or Board capability by itself.
 
-### Cohub Spaces as cloud folders
+### Cohub Spaces with cloud Sessions
 
-Load Cohub Account, Cohub Spaces, the generic remote-root registry and UI, and the Cohub Spaces browser provider. Each accessible Space appears as a folder-like root marked `Cohub`.
+Load Cohub Account, Cohub Spaces, the generic remote-root registry and UI, and the Cohub Spaces browser provider. Each accessible Space appears as a root marked `Cohub`; expanding it lists that Space's Sessions rather than its files.
 
-A Space root never enters DSH local Workspaces. Expanding it does not change a Session working directory, create a local path, change Shell behavior, or start a Cohub Session. Opaque Space-relative identities cross the remote-root seam.
+A Space root never enters DSH local Workspaces. Expanding it does not change a Session working directory, create a local path, change Shell behavior, or start a Cohub Session. Opaque Space and Session identities cross the remote-root seam. Opening Session history is the next conversation-adapter layer, not file browsing.
 
 ### Model, generation, and Board
 

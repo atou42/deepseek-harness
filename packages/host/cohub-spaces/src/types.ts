@@ -6,6 +6,22 @@ export interface CohubSpaceView {
   readonly title: string
 }
 
+/** One Cohub conversation shown beneath its owning Space. */
+export interface CohubSessionView {
+  readonly id: string
+  readonly spaceId: string
+  readonly title: string
+  readonly status: string
+  readonly latestMessageText?: string
+  readonly updatedAt: string
+}
+
+/** Complete Session listing for one Space. */
+export interface CohubSpaceSessionList {
+  readonly spaceId: string
+  readonly sessions: readonly CohubSessionView[]
+}
+
 /** One immediate child returned by the Cohub filesystem API. */
 export interface CohubSpaceEntry {
   readonly path: string

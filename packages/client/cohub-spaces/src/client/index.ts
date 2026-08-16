@@ -3,10 +3,8 @@
 import type { ClientContext, ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   CohubAccountSnapshot,
-  CohubSpaceDirectory,
-  CohubSpaceTextFile,
+  CohubSpaceSessionList,
   CohubSpaceView,
-  CohubSpaceWriteResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
   RemoteDirectoryListing,
@@ -14,8 +12,6 @@ import type {
   RemoteRootSource,
   RemoteRootSourceId,
   RemoteRootSourceSnapshot,
-  RemoteTextFile,
-  RemoteTextWriteResult,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-remote-roots/client'
@@ -25,9 +21,7 @@ export const COHUB_SPACES_SOURCE_ID = 'cohub.spaces' as RemoteRootSourceId
 export interface CohubSpacesRemoteApi {
   getAccount(): Promise<CohubAccountSnapshot>
   listSpaces(): Promise<readonly CohubSpaceView[]>
-  listDirectory(spaceId: string, path: string): Promise<CohubSpaceDirectory>
-  readText(spaceId: string, path: string): Promise<CohubSpaceTextFile>
-  writeText(spaceId: string, path: string, content: string, ifRevision: string): Promise<CohubSpaceWriteResult>
+  listSessions(spaceId: string): Promise<CohubSpaceSessionList>
 }
 
 type RemoteAnswer<T> =
@@ -55,20 +49,6 @@ function resourceId(spaceId: string, path: string): RemoteResourceId {
   return JSON.stringify([spaceId, path]) as RemoteResourceId
 }
 
-function resourcePath(rootId: RemoteResourceId, id: RemoteResourceId): string {
-  if (id === rootId) return ''
-  let value: unknown
-  try {
-    value = JSON.parse(id)
-  } catch (error) {
-    throw new TypeError('client-cohub-spaces: malformed remote resource id', { cause: error })
-  }
-  if (!Array.isArray(value) || value.length !== 2 || value[0] !== rootId || typeof value[1] !== 'string') {
-    throw new TypeError('client-cohub-spaces: remote resource id does not belong to the requested Space')
-  }
-  return value[1]
-}
-
 function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (signal === undefined) return promise
   if (signal.aborted) return Promise.reject(rejection(signal.reason, 'client-cohub-spaces: operation aborted'))
@@ -86,13 +66,6 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
       },
     )
   })
-}
-
-function mapTextFile(rootId: RemoteResourceId, fileId: RemoteResourceId, value: CohubSpaceTextFile): RemoteTextFile {
-  if (value.spaceId !== rootId || value.path !== resourcePath(rootId, fileId)) {
-    throw new TypeError('client-cohub-spaces: file response does not match the requested resource')
-  }
-  return Object.freeze({ rootId, fileId, content: value.content, revision: value.revision })
 }
 
 /** Independently disposable Cohub source. It owns no account or credential state. */
@@ -142,7 +115,7 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
           id: space.id as RemoteResourceId,
           title: space.title,
           marker: Object.freeze({ kind: 'cloud' as const, label: 'Cohub' }),
-          capabilities: Object.freeze({ browse: true as const, read: true, write: true }),
+          capabilities: Object.freeze({ browse: true as const, read: false, write: false }),
         })
       })
       this.publish(Object.freeze({ status: 'ready', roots: Object.freeze(roots) }))
@@ -157,56 +130,19 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     readonly parentId: RemoteResourceId
     readonly signal?: AbortSignal
   }): Promise<RemoteDirectoryListing> {
-    const path = resourcePath(request.rootId, request.parentId)
-    const value = await abortable(this.remote.listDirectory(request.rootId, path), request.signal)
-    if (value.spaceId !== request.rootId || value.path !== path) {
-      throw new TypeError('client-cohub-spaces: directory response does not match the requested resource')
-    }
+    if (request.parentId !== request.rootId) throw new TypeError('client-cohub-spaces: Sessions are leaf resources')
+    const value = await abortable(this.remote.listSessions(request.rootId), request.signal)
+    if (value.spaceId !== request.rootId) throw new TypeError('client-cohub-spaces: Session list does not match the requested Space')
     return Object.freeze({
       rootId: request.rootId,
       parentId: request.parentId,
-      entries: Object.freeze(value.entries.map(entry => Object.freeze({
-        id: resourceId(value.spaceId, entry.path),
+      entries: Object.freeze(value.sessions.map(session => Object.freeze({
+        id: resourceId(value.spaceId, session.id),
         parentId: request.parentId,
-        name: entry.name,
-        kind: entry.kind,
-        revision: entry.revision,
-        size: entry.size,
+        name: session.title,
+        kind: 'session' as const,
+        revision: session.updatedAt,
       }))),
-    })
-  }
-
-  async read(request: {
-    readonly rootId: RemoteResourceId
-    readonly fileId: RemoteResourceId
-    readonly signal?: AbortSignal
-  }): Promise<RemoteTextFile> {
-    const path = resourcePath(request.rootId, request.fileId)
-    const value = await abortable(this.remote.readText(request.rootId, path), request.signal)
-    return mapTextFile(request.rootId, request.fileId, value)
-  }
-
-  async write(request: {
-    readonly rootId: RemoteResourceId
-    readonly fileId: RemoteResourceId
-    readonly content: string
-    readonly ifRevision: string
-    readonly signal?: AbortSignal
-  }): Promise<RemoteTextWriteResult> {
-    const path = resourcePath(request.rootId, request.fileId)
-    const result = await abortable(
-      this.remote.writeText(request.rootId, path, request.content, request.ifRevision),
-      request.signal,
-    )
-    if (result.ok) {
-      return Object.freeze({ ok: true, value: mapTextFile(request.rootId, request.fileId, result.value) })
-    }
-    return Object.freeze({
-      ok: false,
-      error: Object.freeze({
-        code: 'version-conflict',
-        current: mapTextFile(request.rootId, request.fileId, result.error.current),
-      }),
     })
   }
 
@@ -238,12 +174,8 @@ export function apply(ctx: ClientContext): () => void {
   const source = new CohubSpacesRemoteRootSource({
     getAccount: async () => unwrapRemote('cohubAccount.getAccount', await accountCarrier.getAccount()),
     listSpaces: async () => unwrapRemote('cohubSpaces.listSpaces', await carrier.listSpaces()),
-    listDirectory: async (spaceId, path) =>
-      unwrapRemote('cohubSpaces.listDirectory', await carrier.listDirectory(spaceId, path)),
-    readText: async (spaceId, path) =>
-      unwrapRemote('cohubSpaces.readText', await carrier.readText(spaceId, path)),
-    writeText: async (spaceId, path, content, ifRevision) =>
-      unwrapRemote('cohubSpaces.writeText', await carrier.writeText(spaceId, path, content, ifRevision)),
+    listSessions: async spaceId =>
+      unwrapRemote('cohubSpaces.listSessions', await carrier.listSessions(spaceId)),
   })
   const unregister = ctx.remoteRoots.register(source)
   let off: (() => void) | undefined

@@ -9,6 +9,7 @@ import type {
   RemoteResourceId, RemoteRootSource, RemoteRootSourceId, RemoteRootSourceSnapshot,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 import { RemoteRootsService } from '../../remote-roots/src/client/service.ts'
+import { CohubSpacesRemoteRootSource } from '../../cohub-spaces/src/client/index.ts'
 import { apply as workspaceApply, inject as workspaceInject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { apply as remoteUiApply, inject as remoteUiInject } from '@deepseek-ai/dsh-client-ui-remote-roots/client'
 
@@ -66,6 +67,54 @@ describe('remote roots through the assembled Workspace browser', () => {
     disposeProvider()
     await waitFor(() => { expect(view.queryByText('云端故事空间')).toBeNull() })
     expect(runtime.workspaces.list.getSnapshot().items).toEqual([])
+    await runtime.dispose()
+  })
+
+  it('composes the Cohub provider so opening a Space renders Sessions rather than files', async () => {
+    const runtime = await SlotTestRuntime.create()
+    const locale = new LocaleRuntime(runtime.ctx)
+    runtime.provide('locale', locale)
+    runtime.slots.installLocale(locale)
+    await runtime.ctx.plugin(RemoteRootsService).await()
+    await runtime.root.declare(
+      { 'sidebar.workspaces': { kind: 'single', scope: 'root' } } as never,
+      SidebarFrame as never,
+    )
+    await runtime.mount({ inject: [...workspaceInject], apply: workspaceApply })
+    await runtime.mount({ inject: [...remoteUiInject], apply: remoteUiApply })
+
+    const source = new CohubSpacesRemoteRootSource({
+      getAccount: vi.fn(async () => ({
+        revision: 1,
+        status: 'authenticated' as const,
+        profile: { userId: 'user-1' },
+        accessTokenExpiresAt: Date.now() + 60_000,
+      })),
+      listSpaces: vi.fn(async () => [{ id: 'space-1', title: 'deepseek harness' }]),
+      listSessions: vi.fn(async () => ({
+        spaceId: 'space-1',
+        sessions: [{
+          id: 'session-1',
+          spaceId: 'space-1',
+          title: '把 Cohub Session 接进 DSH',
+          status: 'active',
+          latestMessageText: '继续实现',
+          updatedAt: '2026-08-16T10:00:00.000Z',
+        }],
+      })),
+    })
+    const service = runtime.ctx.get('remoteRoots') as RemoteRootsService
+    const disposeProvider = service.register(source)
+    await source.refresh()
+    const view = runtime.renderRoot()
+
+    fireEvent.click(await view.findByRole('treeitem', { name: '展开 deepseek harness' }))
+    expect(await view.findByRole('treeitem', { name: '会话 把 Cohub Session 接进 DSH' })).toBeTruthy()
+    expect(view.queryByRole('treeitem', { name: /文件/ })).toBeNull()
+    expect(runtime.workspaces.list.getSnapshot().items).toEqual([])
+
+    disposeProvider()
+    source.dispose()
     await runtime.dispose()
   })
 })
