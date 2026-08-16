@@ -89,3 +89,15 @@ Cohub 当前的原始补全契约不接收工具 Schema 或停止序列，也不
 没有使用真实 Cohub 凭据或端点，也没有改 Cohub 代码、现用 Profile、主工作树，没有合并、推送、发布或发版。
 
 下一步：把 Board 作为独立可选浏览器界面接入，使用 Cohub 身份，但不把 Space 云文件夹变成本地 Workspace。
+
+## 2026-08-16 · 独立的 Cohub Board 只读界面
+
+新的 `@deepseek-ai/dsh-cohub-board` Host 包只提供一项经过身份认证的 Board 只读检查。它通过 Cohub 正式 Board 接口只读取节点和连接，并校验请求对应的 Space 与 Board、有限且为正的几何数据、节点与连接 ID 唯一性、图引用、时间和 JSON 元数据；错误结构会被拒绝。Account 服务仍是 Bearer Token 的唯一所有者。创建、事务、校验、播放和发布方法都没有越过 Remote 边界。
+
+可单独加载的 `@deepseek-ai/dsh-client-cohub-board` 包拥有自己的侧栏入口和浮层，不把 Board 行为塞进通用文件树。它通过现有 Space Remote 列出 Space 与文件夹，发现真实 `.board` 清单，独立校验清单，再把 Board 节点和连接显示在自适应画布上。公开 HTTP(S) 图片引用可以直接显示；由于没有把浏览器凭据或私有资源代理带进来，私有 Space 资源只显示为元数据卡片。该界面不会创建本地 Workspace，不改变 cwd，不启动 Cohub Session，不编辑文件，也不发布 Work。
+
+五项 Host 测试和四项浏览器测试通过，覆盖只读 Remote 集、只在 Host 持有的授权信息、清单校验、错误结构与跨 Board 数据、悬空图引用、HTTP 错误、卸载取消、真实 slot 注册、清单发现、节点显示，以及坏清单的可见拒绝。两个包都通过类型检查并可独立构建，定向静态检查通过。
+
+没有复制或修改 Cohub 代码。Cohub 仓库只作为接口事实来源读取。没有使用真实凭据或端点，也没有触碰现用 Profile、主工作树、合并、推送、发布或发版。
+
+下一步：为现有 Cohub Account owner 增加可独立加载的浏览器登录界面，再写清可选组合方式并完成 Goal 总验收。

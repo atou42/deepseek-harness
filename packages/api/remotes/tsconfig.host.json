@@ -26,6 +26,9 @@
       "path": "../../credentials/credentials"
     },
     {
+      "path": "../../host/cohub-board"
+    },
+    {
       "path": "../../host/cohub-spaces"
     },
     {

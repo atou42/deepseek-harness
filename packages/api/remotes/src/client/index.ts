@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import commandsRemote from '@deepseek-ai/dsh-commands/remote'
 import goalsRemote from '@deepseek-ai/dsh-goal/remote'
+import cohubBoardRemote from '@deepseek-ai/dsh-cohub-board/remote'
 import cohubSpacesRemote from '@deepseek-ai/dsh-cohub-spaces/remote'
 import dynamicRemote from '@deepseek-ai/dsh-cordis-host-runner/remote'
 import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote'
@@ -13,9 +14,14 @@ export type { TypertClientRemote as ClientRemote } from '@deepseek-ai/dsh-typert
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
+export type {} from '@deepseek-ai/dsh-cohub-board/remote'
 export type {} from '@deepseek-ai/dsh-cohub-spaces/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 export type {} from '@deepseek-ai/dsh-message-feedback/remote'
+export type {
+  CohubBoardConnection, CohubBoardEndpoint, CohubBoardManifest, CohubBoardNode,
+  CohubBoardRecord, CohubBoardSnapshot,
+} from '@deepseek-ai/dsh-cohub-board/types'
 export type {
   CohubSpaceDirectory, CohubSpaceEntry, CohubSpaceTextFile, CohubSpaceView, CohubSpaceWriteResult,
 } from '@deepseek-ai/dsh-cohub-spaces/types'
@@ -27,6 +33,7 @@ export type { ApiRemoteForwardedEvent } from '../types.ts'
 // declaration the Host emits rather than a flattened restatement of it.
 export type {} from '@deepseek-ai/dsh-commands/types'
 export type {} from '@deepseek-ai/dsh-cordis-host-runner/types'
+export type {} from '@deepseek-ai/dsh-cohub-board/types'
 export type {} from '@deepseek-ai/dsh-cohub-spaces/types'
 export type {} from '@deepseek-ai/dsh-credentials/types'
 export type {} from '@deepseek-ai/dsh-llm/types'
@@ -112,7 +119,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const disposers: Array<() => Promise<void>> = []
   try {
     for (const contribution of [
-      commandsRemote, goalsRemote, cohubSpacesRemote, dynamicRemote, pluginInventoryRemote, messageFeedbackRemote,
+      commandsRemote, goalsRemote, cohubBoardRemote, cohubSpacesRemote, dynamicRemote, pluginInventoryRemote, messageFeedbackRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

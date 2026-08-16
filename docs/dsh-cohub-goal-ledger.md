@@ -89,3 +89,15 @@ The first test run exposed a real catalog parser defect: the implementation read
 No real Cohub credential or endpoint was used. No Cohub code, active profile, main worktree, merge, push, publication, or release was touched.
 
 Next action: add Board as its own optional browser surface, using Cohub identity without turning the Space cloud folder into a local Workspace.
+
+## 2026-08-16 · Independent read-only Cohub Board surface
+
+The new `@deepseek-ai/dsh-cohub-board` Host package exposes one authenticated, read-only Board inspection method. It requests only nodes and connections from Cohub's formal Board API, validates the requested Space and Board identities, finite positive geometry, unique node and connection identities, graph references, timestamps, and JSON metadata, and rejects malformed responses. The Account service remains the sole bearer-token owner. No create, transaction, validation, playback, or publish method crosses the Remote boundary.
+
+The separately loadable `@deepseek-ai/dsh-client-cohub-board` package contributes its own sidebar action and overlay instead of coupling Board behavior into the generic file tree. It lists Spaces and folders through the existing Space Remote, discovers real `.board` manifests, validates each manifest independently, and then renders the Board's nodes and connections on a fit-to-view canvas. Public HTTP(S) image references may render directly; private Space assets remain metadata cards because no browser credential or private-asset proxy was introduced. The surface never creates a local Workspace, changes cwd, starts a Cohub Session, edits files, or publishes a Work.
+
+Five Host tests and four browser tests pass, covering the read-only Remote set, Host-only authorization, manifest validation, malformed and cross-Board data, dangling graph references, HTTP errors, unload cancellation, real slot registration, manifest discovery, node rendering, and visible rejection of a malformed manifest. Both packages type-check and build independently. Scoped lint passes.
+
+No Cohub code was copied or modified. The Cohub repository was read only as API-contract evidence. No real credential or endpoint was used, and no active profile, main worktree, merge, push, publication, or release was touched.
+
+Next action: add the separately loadable browser login surface for the existing Cohub Account owner, then document optional composition recipes and run final goal acceptance.
