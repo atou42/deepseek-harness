@@ -122,6 +122,38 @@ function chooseAdd(): void {
 }
 
 describe('WorkspacePicker', () => {
+  it('filters local Workspaces and Cohub Spaces from the picker search field', () => {
+    const remoteRoots: RemoteRootsSnapshot = {
+      revision: 1,
+      sources: [{
+        sourceId: 'cohub' as RemoteRootSourceId,
+        status: 'ready',
+        roots: [
+          {
+            id: 'research-space' as RemoteResourceId,
+            title: 'Studio Research Swarm',
+            marker: { kind: 'cloud', label: 'Cohub' },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
+          },
+          {
+            id: 'creator-space' as RemoteResourceId,
+            title: 'CreatorHub',
+            marker: { kind: 'cloud', label: 'Cohub' },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
+          },
+        ],
+      }],
+    }
+    mount([workspace('alpha', 'Alpha Project')], vi.fn(), occupancySource(), remoteRoots)
+
+    const search = screen.getByRole('searchbox', { name: '搜索工作区' })
+    fireEvent.change(search, { target: { value: 'research' } })
+
+    expect(screen.getByRole('menuitem', { name: 'Studio Research Swarm · Cohub' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'CreatorHub · Cohub' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Alpha Project' })).toBeNull()
+  })
+
   it('lists Cohub Spaces and starts their DSH workbench without creating a local Workspace', async () => {
     const sourceId = 'cohub' as RemoteRootSourceId
     const rootId = 'space-1' as RemoteResourceId

@@ -11,7 +11,7 @@
 import type { ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Button, IconFolderClose16, IconPlusOutline16, Menu, Modal, type MenuEntry,
+  Button, IconFolderClose16, IconPlusOutline16, IconSearchOutline16, Input, Menu, Modal, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   WorkspaceId, WorkspaceListState, WorkspaceView,
@@ -24,6 +24,11 @@ import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/s
 import css from './WorkspacePicker.module.css'
 
 const ADD_WORKSPACE = '::add-workspace'
+const NO_SEARCH_RESULTS = '::no-search-results'
+
+function searchText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase()
+}
 
 /** Core flow props: the owner supplies popover control and pick semantics. */
 export interface WorkspacePickFlowProps {
@@ -99,6 +104,7 @@ export function WorkspacePickFlow({
   const [flowOpen, setFlowOpen] = useState(false)
   const [pickingFolder, setPickingFolder] = useState(false)
   const [activatingRemote, setActivatingRemote] = useState(false)
+  const [query, setQuery] = useState('')
   // One picking interaction at a time: while the flow is open (native chooser
   // pending, browse dialog up) or its pick is being adopted, every other
   // menu action stays disabled — a late outcome must not race a concurrent
@@ -124,23 +130,42 @@ export function WorkspacePickFlow({
   // With workspaces listed, the add action pins below the scroll region
   // (divider + always visible); otherwise it IS the menu.
   const pinAdd = !addOnly && (workspaces.length > 0 || remoteEntries.length > 0)
+  const normalizedQuery = searchText(query.trim())
+  const workspaceEntries = workspaces.map(workspace => ({
+    id: workspace.workspaceId,
+    label: workspace.title,
+    searchText: searchText(workspace.title),
+  }))
+  const filteredWorkspaces = normalizedQuery.length === 0
+    ? workspaceEntries
+    : workspaceEntries.filter(entry => entry.searchText.includes(normalizedQuery))
+  const filteredRemotes = normalizedQuery.length === 0
+    ? remoteEntries
+    : remoteEntries.filter(entry => searchText(entry.label).includes(normalizedQuery))
+  const filteredEntries: MenuEntry[] = [...filteredWorkspaces.map(workspace => ({
+    id: workspace.id,
+    label: workspace.label,
+    icon: <IconFolderClose16 size={16} />,
+    disabled: flowBusy,
+  })), ...filteredRemotes.map(entry => ({
+    id: entry.id,
+    label: entry.label,
+    icon: <IconFolderClose16 size={16} />,
+    disabled: flowBusy,
+  }))]
   const items: MenuEntry[] = pinAdd
-    ? [...workspaces.map(workspace => ({
-      id: workspace.workspaceId,
-      label: workspace.title,
-      icon: <IconFolderClose16 size={16} />,
-      disabled: flowBusy,
-    })), ...remoteEntries.map(entry => ({
-      id: entry.id,
-      label: entry.label,
-      icon: <IconFolderClose16 size={16} />,
-      disabled: flowBusy,
-    }))]
+    ? filteredEntries.length > 0 || normalizedQuery.length === 0
+      ? filteredEntries
+      : [{ type: 'label', id: NO_SEARCH_RESULTS, text: t('picker.search.empty') }]
     : addEntries
   // Nothing listed and nothing to add with (a composition that mounts this
   // package without any directory-picker): an empty popover would claim a
   // choice that does not exist, so the anchor gesture shows nothing at all.
   const menuIsEmpty = items.length === 0
+
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
 
   const closeModal = (): void => {
     setErrorOpen(false)
@@ -227,6 +252,19 @@ export function WorkspacePickFlow({
         open={open && !addIsTheOnlyEntry && !menuIsEmpty}
         anchor={null}
         items={items}
+        {...!addOnly && pinAdd ? {
+          header: (
+            <Input
+              className={css.pickerSearch ?? ''}
+              type="search"
+              value={query}
+              icon={<IconSearchOutline16 size={16} />}
+              aria-label={t('picker.search.aria')}
+              placeholder={t('picker.search.placeholder')}
+              onChange={(event) => { setQuery(event.currentTarget.value) }}
+            />
+          ),
+        } : {}}
         {...pinAdd ? { footer: addEntries } : {}}
         selectedId={selectedRemoteId ?? selectedId}
         onSelect={handleSelect}

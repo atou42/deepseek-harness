@@ -18,3 +18,9 @@
 .menuStatus {
   color: var(--dsw-alias-label-secondary);
 }
+
+.pickerSearch {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+}
