@@ -28,6 +28,8 @@ export interface RemoteRootView {
   readonly id: RemoteResourceId
   readonly title: string
   readonly marker: RemoteRootMarker
+  /** Provider-native text inserted when this root is referenced from its remote composer. */
+  readonly conversationReference?: string
   readonly capabilities: RemoteRootCapabilities
 }
 

@@ -115,6 +115,79 @@ describe('RemoteConversationOverlay', () => {
     })
   })
 
+  it('opens the provider Space list on @ and sends the selected native reference', async () => {
+    const sourceId = sid('cohub')
+    const rootId = rid('space-1')
+    const referencedRootId = rid('space-2')
+    const snapshot = createSnapshotStore<RemoteRootsSnapshot>({
+      revision: 1,
+      sources: [{
+        sourceId,
+        status: 'ready',
+        roots: [
+          {
+            id: rootId,
+            title: 'Current Space',
+            marker: { kind: 'cloud', label: 'Cohub' },
+            conversationReference: '@[Current Space](cohub://spaces/space-1)',
+            capabilities: { browse: true, read: false, write: false, conversation: 'interactive' },
+          },
+          {
+            id: referencedRootId,
+            title: 'Research Space',
+            marker: { kind: 'cloud', label: 'Cohub' },
+            conversationReference: '@[Research Space](cohub://spaces/space-2)',
+            capabilities: { browse: true, read: false, write: false, conversation: 'interactive' },
+          },
+        ],
+      }],
+      active: { sourceId, rootId, rootTitle: 'Current Space', conversation: 'interactive' },
+    })
+    const sendConversationMessage = vi.fn(async () => ({
+      rootId,
+      session: { id: rid('session-1'), title: 'Native chat', status: 'active' },
+      turn: {
+        id: rid('turn-1'), sequence: 1, status: 'queued',
+        userText: '@[Research Space](cohub://spaces/space-2) 总结',
+        updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+    }))
+    const view = render(
+      <RemoteConversationOverlay
+        useRemoteRoots={bindSnapshotSelector(snapshot)}
+        listConversationModels={vi.fn(async () => ({ groups: [] }))}
+        readConversation={vi.fn()}
+        sendConversationMessage={sendConversationMessage}
+        abortConversationTurn={vi.fn()}
+        deactivate={vi.fn()}
+        t={t}
+      />,
+    )
+    const composer = view.getByRole('textbox', { name: '发送给 Cohub Agent' })
+    fireEvent.change(composer, { target: { value: '@res', selectionStart: 4, selectionEnd: 4 } })
+
+    const mentions = view.getByRole('listbox', { name: '引用 Cohub Space' })
+    expect(mentions.textContent).toContain('Research Space')
+    expect(mentions.textContent).not.toContain('Current Space')
+    fireEvent.keyDown(composer, { key: 'Enter' })
+    expect((composer as HTMLTextAreaElement).value).toBe('@[Research Space](cohub://spaces/space-2) ')
+
+    fireEvent.change(composer, {
+      target: {
+        value: '@[Research Space](cohub://spaces/space-2) 总结',
+        selectionStart: 51,
+        selectionEnd: 51,
+      },
+    })
+    fireEvent.click(view.getByRole('button', { name: '发送' }))
+    await vi.waitFor(() => { expect(sendConversationMessage).toHaveBeenCalledOnce() })
+    expect(sendConversationMessage).toHaveBeenCalledWith(sourceId, {
+      rootId,
+      content: '@[Research Space](cohub://spaces/space-2) 总结',
+      clientMessageId: expect.any(String) as string,
+    })
+  })
+
   it('renders Cohub thinking and tool progress with native DSH disclosures', async () => {
     const sourceId = sid('cohub')
     const rootId = rid('space-1')

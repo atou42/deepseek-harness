@@ -41,6 +41,7 @@ describe('RemoteRootsService', () => {
         id: resourceId('space:one'),
         title: 'Cloud Space',
         marker: { kind: 'cloud', label: 'Cloud' },
+        conversationReference: '@[Cloud Space](cloud://spaces/one)',
         capabilities: { browse: true, read: true, write: false },
       }],
     })
@@ -51,6 +52,7 @@ describe('RemoteRootsService', () => {
         id: resourceId('space:one'),
         title: 'Cloud Space',
         marker: { kind: 'cloud', label: 'Cloud' },
+        conversationReference: '@[Cloud Space](cloud://spaces/one)',
         capabilities: { browse: true, read: true, write: false },
       }],
     }])
@@ -114,6 +116,19 @@ describe('RemoteRootsService', () => {
       } as unknown as RemoteRootSourceSnapshot)
     }).toThrow(/invalid marker kind/)
     expect(() => service.snapshot.getSnapshot()).toThrow(/invalid marker kind/)
+    fixture.snapshot.set({ status: 'loading', roots: [] })
+    expect(() => {
+      fixture.snapshot.set({
+        status: 'ready',
+        roots: [{
+          id: resourceId('space:one'),
+          title: 'Cloud Space',
+          marker: { kind: 'cloud', label: 'Cloud' },
+          conversationReference: '   ',
+          capabilities: { browse: true, read: true, write: false },
+        }],
+      } as unknown as RemoteRootSourceSnapshot)
+    }).toThrow(/conversationReference must be a non-blank string/)
     fixture.snapshot.set({ status: 'loading', roots: [] })
     expect(() => {
       fixture.snapshot.set({

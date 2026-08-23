@@ -152,6 +152,9 @@ function cloneRoot(sourceId: string, value: unknown): RemoteRootsSnapshot['sourc
       kind: kind as 'cloud' | 'network' | 'external',
       label: nonBlank(marker.label, `source "${sourceId}" marker label`),
     }),
+    ...root.conversationReference === undefined
+      ? {}
+      : { conversationReference: nonBlank(root.conversationReference, `source "${sourceId}" root conversationReference`) },
     capabilities: Object.freeze({
       browse: true,
       read: capabilities.read,

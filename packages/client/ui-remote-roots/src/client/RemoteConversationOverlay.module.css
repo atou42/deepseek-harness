@@ -58,6 +58,13 @@
 .composerCard textarea { min-height: 54px; max-height: 180px; flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; line-height: 1.5; }
 .composerCard textarea::placeholder { color: var(--dsw-alias-label-tertiary); }
 .composerToolbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.mentionMenu { position: absolute; right: 0; bottom: calc(100% + 10px); left: 0; z-index: 2; max-height: 320px; overflow-y: auto; border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px; padding: 8px; background: var(--dsw-alias-bg-base); box-shadow: var(--dsw-shadow-lv2); }
+.mentionMenuHeader { padding: 5px 8px 7px; color: var(--dsw-alias-label-tertiary); font-size: 12px; font-weight: 600; }
+.mentionOption { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; border: 0; border-radius: 10px; padding: 10px 12px; background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; text-align: left; }
+.mentionOption:hover, .mentionOption[data-selected] { background: var(--dsw-alias-interactive-bg-hover); }
+.mentionOption span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mentionOption small { flex: none; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.mentionEmpty { margin: 0; padding: 18px 12px; color: var(--dsw-alias-label-tertiary); font-size: 13px; text-align: center; }
 .modelButton { display: inline-flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; border: 0; border-radius: 8px; padding: 7px 9px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font: inherit; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .modelButton:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .submitButton { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border: 0; border-radius: 50%; background: var(--dsw-alias-interactive-primary); color: var(--dsw-alias-label-reverse); cursor: pointer; }

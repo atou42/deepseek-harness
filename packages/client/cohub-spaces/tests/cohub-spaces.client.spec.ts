@@ -58,10 +58,12 @@ describe('CohubSpacesRemoteRootSource', () => {
         roots: [
           {
             id: 'space-1', title: 'World Bible', marker: { kind: 'cloud', label: 'Cohub' },
+            conversationReference: '@[World Bible](cohub://spaces/space-1)',
             capabilities: { browse: true, read: false, write: false, workspace: false, conversation: 'interactive' },
           },
           {
             id: 'space-2', title: 'Drafts', marker: { kind: 'cloud', label: 'Cohub' },
+            conversationReference: '@[Drafts](cohub://spaces/space-2)',
             capabilities: { browse: true, read: false, write: false, workspace: false, conversation: 'interactive' },
           },
         ],

@@ -5,7 +5,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   RemoteConversationBlock, RemoteConversationModelCatalog, RemoteConversationSelection,
-  RemoteConversationThinkingLevel,
+  RemoteConversationThinkingLevel, RemoteRootView,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { RemoteConversationOverlayProps } from './contract.ts'
 import css from './RemoteConversationOverlay.module.css'
@@ -23,6 +23,38 @@ type ModelsState =
 const THINKING_LEVELS: readonly RemoteConversationThinkingLevel[] = Object.freeze([
   'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max',
 ])
+const MENTION_RESULT_LIMIT = 24
+
+interface MentionTrigger {
+  readonly start: number
+  readonly end: number
+  readonly query: string
+}
+
+function detectMentionTrigger(text: string, cursor: number): MentionTrigger | undefined {
+  if (cursor < 0 || cursor > text.length) return undefined
+  const prefix = text.slice(Math.max(0, cursor - 96), cursor)
+  const match = /(^|\s)@([^@\s[\]()]{0,80})$/.exec(prefix)
+  if (match === null) return undefined
+  const query = match[2] ?? ''
+  const start = cursor - query.length - 1
+  if (start > 0 && !/\s/.test(text[start - 1] ?? '')) return undefined
+  return { start, end: cursor, query }
+}
+
+function mentionCandidates(
+  roots: readonly RemoteRootView[],
+  currentRootId: RemoteRootView['id'],
+  query: string,
+): readonly RemoteRootView[] {
+  const normalizedQuery = query.normalize('NFKC').toLocaleLowerCase().trim()
+  return roots
+    .filter(root => root.id !== currentRootId
+      && root.conversationReference !== undefined
+      && (normalizedQuery.length === 0
+        || root.title.normalize('NFKC').toLocaleLowerCase().includes(normalizedQuery)))
+    .slice(0, MENTION_RESULT_LIMIT)
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -175,6 +207,7 @@ export function RemoteConversationOverlay({
   sendConversationMessage, abortConversationTurn, t,
 }: RemoteConversationOverlayProps) {
   const active = useRemoteRoots(snapshot => snapshot.active)
+  const activeSource = useRemoteRoots(snapshot => snapshot.sources.find(source => source.sourceId === snapshot.active?.sourceId))
   const [conversation, setConversation] = useState<ConversationState>({ status: 'loading' })
   const [models, setModels] = useState<ModelsState>({ status: 'loading' })
   const [selection, setSelection] = useState<RemoteConversationSelection>({})
@@ -184,7 +217,10 @@ export function RemoteConversationOverlay({
   const [action, setAction] = useState<'idle' | 'sending' | 'stopping'>('idle')
   const [actionError, setActionError] = useState<string>()
   const [refreshRevision, setRefreshRevision] = useState(0)
+  const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger>()
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const historyRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   const followTailRef = useRef(true)
 
   const activeKey = active === undefined ? '' : `${active.sourceId}\0${active.rootId}\0${active.sessionId ?? ''}`
@@ -197,6 +233,8 @@ export function RemoteConversationOverlay({
     setRetryIdentity(undefined)
     setAction('idle')
     setActionError(undefined)
+    setMentionTrigger(undefined)
+    setSelectedMentionIndex(0)
   }, [activeKey])
 
   useEffect(() => {
@@ -259,6 +297,14 @@ export function RemoteConversationOverlay({
       .find(model => model.provider === selection.provider && model.id === selection.model)?.name
   }, [models, selection])
 
+  const mentions = useMemo(() => active === undefined || activeSource?.status !== 'ready'
+    ? []
+    : mentionCandidates(activeSource.roots, active.rootId, mentionTrigger?.query ?? ''), [active, activeSource, mentionTrigger])
+
+  useEffect(() => {
+    setSelectedMentionIndex(index => Math.min(index, Math.max(0, mentions.length - 1)))
+  }, [mentions])
+
   useEffect(() => {
     const history = historyRef.current
     if (history !== null && followTailRef.current) history.scrollTop = history.scrollHeight
@@ -306,6 +352,20 @@ export function RemoteConversationOverlay({
       setActionError(t('conversation.submitUnknown', { message: message(error) }))
     }).finally(() => {
       if (activeKeyRef.current === submittedKey) setAction('idle')
+    })
+  }
+
+  const applyMention = (root: RemoteRootView): void => {
+    if (mentionTrigger === undefined || root.conversationReference === undefined) return
+    const snippet = `${root.conversationReference} `
+    const next = draft.slice(0, mentionTrigger.start) + snippet + draft.slice(mentionTrigger.end)
+    const cursor = mentionTrigger.start + snippet.length
+    setDraft(next)
+    setMentionTrigger(undefined)
+    setSelectedMentionIndex(0)
+    requestAnimationFrame(() => {
+      composerRef.current?.focus()
+      composerRef.current?.setSelectionRange(cursor, cursor)
     })
   }
 
@@ -387,6 +447,29 @@ export function RemoteConversationOverlay({
         <footer className={css.composerArea}>
           <div className={css.composerFrame}>
             {actionError !== undefined && <p className={css.error} role="alert">{actionError}</p>}
+            {mentionTrigger !== undefined && (
+              <div className={css.mentionMenu} role="listbox" aria-label={t('conversation.mention.aria')}>
+                <div className={css.mentionMenuHeader}>{t('conversation.mention.title')}</div>
+                {mentions.length === 0
+                  ? <p className={css.mentionEmpty}>{t('conversation.mention.empty')}</p>
+                  : mentions.map((root, index) => (
+                    <button
+                      key={root.id}
+                      type="button"
+                      role="option"
+                      aria-selected={index === selectedMentionIndex}
+                      className={css.mentionOption}
+                      data-selected={index === selectedMentionIndex || undefined}
+                      onPointerDown={(event) => { event.preventDefault() }}
+                      onMouseEnter={() => { setSelectedMentionIndex(index) }}
+                      onClick={() => { applyMention(root) }}
+                    >
+                      <span>{root.title}</span>
+                      <small>{root.marker.label}</small>
+                    </button>
+                  ))}
+              </div>
+            )}
             {modelMenuOpen && (
               <div className={css.modelMenu}>
                 {models.status === 'loading' && <p role="status">{t('conversation.model.loading')}</p>}
@@ -454,6 +537,7 @@ export function RemoteConversationOverlay({
             )}
             <div className={css.composerCard}>
               <textarea
+                ref={composerRef}
                 value={draft}
                 aria-label={t('conversation.composer.aria')}
                 placeholder={t('conversation.composer.placeholder')}
@@ -461,9 +545,42 @@ export function RemoteConversationOverlay({
                 onChange={(event) => {
                   const next = event.currentTarget.value
                   setDraft(next)
+                  setModelMenuOpen(false)
+                  setMentionTrigger(detectMentionTrigger(next, event.currentTarget.selectionStart))
+                  setSelectedMentionIndex(0)
                   if (retryIdentity !== undefined && next.trim() !== retryIdentity.content) setRetryIdentity(undefined)
                 }}
+                onSelect={(event) => {
+                  const target = event.currentTarget
+                  setMentionTrigger(target.selectionStart === target.selectionEnd
+                    ? detectMentionTrigger(draft, target.selectionStart)
+                    : undefined)
+                }}
                 onKeyDown={(event) => {
+                  if (mentionTrigger !== undefined) {
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      setMentionTrigger(undefined)
+                      return
+                    }
+                    if (mentions.length > 0 && event.key === 'ArrowDown') {
+                      event.preventDefault()
+                      setSelectedMentionIndex(index => Math.min(index + 1, mentions.length - 1))
+                      return
+                    }
+                    if (mentions.length > 0 && event.key === 'ArrowUp') {
+                      event.preventDefault()
+                      setSelectedMentionIndex(index => Math.max(index - 1, 0))
+                      return
+                    }
+                    if (mentions.length > 0 && (event.key === 'Tab'
+                      || (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing))) {
+                      event.preventDefault()
+                      const root = mentions[selectedMentionIndex]
+                      if (root !== undefined) applyMention(root)
+                      return
+                    }
+                  }
                   if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault()
                     submit()

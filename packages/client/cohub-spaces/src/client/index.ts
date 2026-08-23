@@ -99,6 +99,12 @@ function mention(reference: CohubSpaceReference): string {
   return `@[${label}](cohub-space:${encodeURIComponent(reference.spaceId)})`
 }
 
+function nativeConversationMention(spaceId: string, title: string): string {
+  const label = title.replace(/[[\]\\]/g, '').replace(/\s+/g, ' ').trim()
+    || `space:${spaceId.slice(0, 8)}`
+  return `@[${label}](cohub://spaces/${encodeURIComponent(spaceId)})`
+}
+
 function normalized(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase()
 }
@@ -261,6 +267,7 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
           id: space.id as RemoteResourceId,
           title: space.title,
           marker: Object.freeze({ kind: 'cloud' as const, label: 'Cohub' }),
+          conversationReference: nativeConversationMention(space.id, space.title),
           capabilities: Object.freeze({
             browse: true as const, read: false, write: false, workspace: false, conversation: 'interactive' as const,
           }),
