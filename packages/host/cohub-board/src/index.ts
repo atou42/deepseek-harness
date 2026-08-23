@@ -19,8 +19,13 @@ import type {
 
 export type * from './types.ts'
 
-export interface Config { apiBaseUrl?: string }
+/** Cohub Board adapter configuration. */
+export interface Config {
+  /** Cohub API origin. */
+  apiBaseUrl?: string
+}
 
+/** Cohub Board HTTP rejection with its response status. */
 export class CohubBoardHttpError extends Error {
   constructor(readonly status: number, message: string) {
     super(`cohub-board: HTTP ${String(status)}: ${message}`)
@@ -177,6 +182,11 @@ function parseConnection(value: unknown, boardId: string, index: number): CohubB
   })
 }
 
+/**
+ * Parse a Cohub Board manifest stored in a Space file.
+ * @param value - Manifest JSON text.
+ * @returns The validated Board identity and title.
+ */
 export function parseBoardManifest(value: string): CohubBoardManifest {
   let parsed: unknown
   try { parsed = JSON.parse(value) } catch (error) {
@@ -252,6 +262,13 @@ export class CohubBoardGateway extends TypertRemoteService {
     }
   }
 
+  /**
+   * Read one authenticated Cohub Board with its nodes and connections.
+   * @param spaceId - Owning Cohub Space id.
+   * @param boardId - Board id within that Space.
+   * @returns The validated Board snapshot.
+   * @throws When ids are invalid, authentication fails, Cohub rejects the request, or the service is disposed.
+   */
   @Remote('getBoard')
   getBoard(spaceId: string, boardId: string): Promise<CohubBoardSnapshot> {
     const promise = this.getBoardImpl(spaceId, boardId)

@@ -12,7 +12,7 @@
 
 本地 DSH Workspace 与 Cohub Space 仍保持不同语义，但共同出现在 Workspace 导航和选择界面。Cohub Provider 把每个可访问 Space 发布成带标识的远程根。展开 Space 时，通过已登录的 Host 适配器完整读取分页 Session，并把每项显示成带会话图标、身份不透明的 Session 行。这个路径不会调用文件树接口。
 
-主 Workspace 选择器会把远程根和本地 Workspace 一起列出。选择 Cohub Space 时，通过 [Cohub Space DSH Session 绑定](../bug-fix/2026-08-17-cohub-space-dsh-session-binding.md)启动普通 DSH 工作台。选择已有 Cohub Session 时，只在只读查看器中打开它的 Turn 历史；这条导航路径不会向 Cohub Agent 发送提示词。
+主 Workspace 选择器会把远程根和本地 Workspace 一起列出。选择 Cohub Space 时，通过 [Cohub Space DSH Session 绑定](../bug-fix/2026-08-17-cohub-space-dsh-session-binding.zh.md)启动普通 DSH 工作台。选择已有 Cohub Session 时，只在只读查看器中打开它的 Turn 历史；这条导航路径不会向 Cohub Agent 发送提示词。
 
 Host 会校验每一页 Session，持续跟随游标直到完整，并拒绝重复游标、重复 Session 身份、跨 Space 数据、错误时间戳和损坏的分页元数据。失败会原样显示，不会伪装成残缺列表或空列表。
 

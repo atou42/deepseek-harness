@@ -77,7 +77,12 @@ async function message(
   return { role: value.role, content }
 }
 
-/** Serialize one exact DSH call, refusing unsupported semantics before network I/O. */
+/**
+ * Serialize one exact DSH call, refusing unsupported semantics before network I/O.
+ * @param options - Exact DSH generation request.
+ * @param attachments - Optional durable attachment reader for image blocks.
+ * @returns Cohub raw-completion request.
+ */
 export async function serializeCohubRequest(
   options: GenerateOptions,
   attachments?: AttachmentStore,

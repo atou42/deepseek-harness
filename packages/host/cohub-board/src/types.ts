@@ -2,6 +2,7 @@
 
 import type { JsonValue } from '@deepseek-ai/dsh-session/types'
 
+/** Board manifest discovered in a Cohub Space. */
 export interface CohubBoardManifest {
   readonly kind: 'cohub.board.manifest'
   readonly version: 1
@@ -9,6 +10,7 @@ export interface CohubBoardManifest {
   readonly title: string
 }
 
+/** Validated Cohub Board metadata. */
 export interface CohubBoardRecord {
   readonly id: string
   readonly spaceId: string
@@ -19,6 +21,7 @@ export interface CohubBoardRecord {
   readonly updatedAt: string | null
 }
 
+/** Positioned node in a Cohub Board snapshot. */
 export interface CohubBoardNode {
   readonly boardId: string
   readonly nodeId: string
@@ -41,10 +44,12 @@ export interface CohubBoardNode {
   readonly updatedAt: string | null
 }
 
+/** Connection endpoint naming one Board node. */
 export interface CohubBoardEndpoint {
   readonly nodeId: string
 }
 
+/** Directed or undirected connection between Board nodes. */
 export interface CohubBoardConnection {
   readonly id: string
   readonly boardId: string
@@ -56,6 +61,7 @@ export interface CohubBoardConnection {
   readonly revision: number
 }
 
+/** Complete read-only Board snapshot. */
 export interface CohubBoardSnapshot {
   readonly board: CohubBoardRecord
   readonly nodes: readonly CohubBoardNode[]

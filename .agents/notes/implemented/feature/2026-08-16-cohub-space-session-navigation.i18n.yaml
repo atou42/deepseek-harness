@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-16-cohub-space-session-navigation.md
 2026-08-16-cohub-space-session-navigation.md: 20ef4db3282a13fbb9094d19ea714c9dea1b8e5b
-2026-08-16-cohub-space-session-navigation.zh.md: 7fbc2f7d39e18bfa4cae1ce5bf423143e4ea76b0
+2026-08-16-cohub-space-session-navigation.zh.md: 8016064f43b4432c06f829c92a8a942fdd91d484

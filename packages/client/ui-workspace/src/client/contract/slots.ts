@@ -22,7 +22,8 @@
  * and a hole has exactly one declaring entry — they carry the same owner
  * contract and the same occupant.
  */
-import type { HostObservable, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
+import type { HostObservable, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the owner SlotMap merges into programs that resolve the
 // runtime shares below.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -92,19 +93,18 @@ export type DirectoryPickingInjected = {
 }
 
 /** Component-side view of the picking share: the bound occupancy selector hook. */
-export type DirectoryPickingHooks = {
-  /** Selector hook over this surface's directory-flow occupancy. */
-  useDirectoryFlow: SnapshotSelectorHook<boolean>
-  /** Live remote Spaces and the selected remote conversation target. */
-  useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
-}
+export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']>
 
 /**
  * Browser-private injected share (arrives via the register inject factory).
  * Data reads use the global framework hooks; these are the Host actions the
  * browsing region drives.
  */
-export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
+export type WorkspaceBrowserInjected = {
+  hooks: DirectoryPickingInjected['hooks'] & {
+    /** Current generation's Host description, bound by the slot renderer. */
+    hostDescription: HostDescriptionSource
+  }
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and
    * open it; without an explicit workspace, inherit the current Session
@@ -150,6 +150,8 @@ export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
   insertSessionBefore: (workspaceId: WorkspaceId, sessionId: SessionId, beforeSessionId?: SessionId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  /** Start a DSH Session with a provider-owned remote Space attached. */
+  activateRemote: DirectoryPickingInjected['activateRemote']
 }
 
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
@@ -158,7 +160,7 @@ export type WorkspaceBrowserProps =
   & PropsRenderSlots<'sidebar.workspaces.directoryFlow' | 'sidebar.workspaces.remoteRoots'>
   & PropsStore<ReturnType<typeof createWorkspaceViewStore>>
   & Omit<WorkspaceBrowserInjected, 'hooks'>
-  & DirectoryPickingHooks
+  & PropsHooks<WorkspaceBrowserInjected['hooks']>
   & PropsLocale<'workspace'>
 
 /**

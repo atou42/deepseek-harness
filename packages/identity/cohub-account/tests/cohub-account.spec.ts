@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { CredentialProvider, credentialRef } from '@deepseek-ai/dsh-credentials'
-import type { CredentialInfo, CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
+import type {
+  CredentialInfo,
+  CredentialKey,
+  CredentialRecord,
+  CredentialRecordEntry,
+  CredentialRecordInfo,
+  CredentialRef,
+  ResolvedCredential,
+} from '@deepseek-ai/dsh-credentials'
 import CohubAccountService, {
   CohubDeviceAuthorizationError,
   CohubReauthenticationRequiredError,
@@ -12,6 +20,7 @@ const SESSION_REF = credentialRef(DEFAULT_COHUB_SESSION_CREDENTIAL)
 
 class MemoryCredentials extends CredentialProvider {
   readonly values = new Map<string, string>()
+  readonly records = new Map<CredentialKey, CredentialRecord>()
 
   constructor(ctx: Context, seed: Record<string, string> = {}) {
     super(ctx)
@@ -29,12 +38,44 @@ class MemoryCredentials extends CredentialProvider {
 
   set(ref: CredentialRef, value: string): Promise<void> {
     this.values.set(ref, value)
-    this.ctx.emit('credentials/updated', ref)
+    this.ctx.emit('credentials/reference-updated', ref)
     return Promise.resolve()
   }
 
   unset(ref: CredentialRef): Promise<void> {
-    if (this.values.delete(ref)) this.ctx.emit('credentials/updated', ref)
+    if (this.values.delete(ref)) this.ctx.emit('credentials/reference-updated', ref)
+    return Promise.resolve()
+  }
+
+  readRecord(key: CredentialKey): Promise<CredentialRecord | undefined> {
+    return Promise.resolve(this.records.get(key))
+  }
+
+  describeRecord(key: CredentialKey): Promise<CredentialRecordInfo> {
+    const record = this.records.get(key)
+    return Promise.resolve(record === undefined
+      ? { configured: false, writable: true }
+      : { configured: true, kind: record.kind, writable: true })
+  }
+
+  listRecords(): Promise<readonly CredentialRecordEntry[]> {
+    return Promise.resolve([...this.records].map(([key, record]) => ({ key, kind: record.kind })))
+  }
+
+  async modifyRecord(
+    key: CredentialKey,
+    mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>,
+  ): Promise<CredentialRecord | undefined> {
+    const current = this.records.get(key)
+    const next = await mutate(current)
+    if (next === undefined) return current
+    this.records.set(key, next)
+    this.ctx.emit('credentials/record-updated', key)
+    return next
+  }
+
+  deleteRecord(key: CredentialKey): Promise<void> {
+    if (this.records.delete(key)) this.ctx.emit('credentials/record-updated', key)
     return Promise.resolve()
   }
 }
@@ -139,6 +180,25 @@ describe('CohubAccountService', () => {
     })
     const profileRequest = fetchMock.mock.calls[2] as [string, RequestInit]
     expect(profileRequest[1].headers).toEqual({ Authorization: 'Bearer access-new' })
+  })
+
+  it('treats a blank token scope as omitted and retains the requested scope', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({
+        device_code: 'private-device', user_code: 'CODE', verification_uri: 'https://auth.neta.art/activate',
+        expires_in: 600, interval: 5,
+      }))
+      .mockResolvedValueOnce(json({
+        token_type: 'Bearer', access_token: 'access-new', refresh_token: 'refresh-new', expires_in: 3600, scope: '',
+      }))
+      .mockResolvedValueOnce(json({ uuid: 'user-1', profile: { displayName: 'ATou' } })))
+    const { account, credentials } = await boot()
+
+    await account.beginLogin()
+    await expect(account.pollLogin()).resolves.toMatchObject({ status: 'authenticated' })
+    expect(JSON.parse(credentials.values.get(SESSION_REF) ?? '{}')).toMatchObject({
+      scope: 'openid offline_access',
+    })
   })
 
   it('honors pending and slow-down responses, then exposes terminal denial', async () => {

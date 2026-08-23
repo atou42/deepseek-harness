@@ -32,12 +32,14 @@ import type { CohubCatalogModel } from './protocol.ts'
 import { serializeCohubRequest } from './serialize.ts'
 import { parseCohubSse, translateCohubEvents } from './sse.ts'
 
+/** Resolved Cohub completion endpoint coordinates. */
 export interface CohubConnectionOptions {
   readonly apiBaseUrl: string
   readonly spaceId: string
   readonly streamIdleTimeoutMs: number
 }
 
+/** Runtime dependencies for the Cohub LLM adapter. */
 export interface CohubAdapterOptions {
   readonly connection: () => CohubConnectionOptions
   readonly resolveAccessToken: () => Promise<string>
@@ -45,6 +47,7 @@ export interface CohubAdapterOptions {
   readonly fetch?: typeof globalThis.fetch
 }
 
+/** Default maximum silence between Cohub completion stream events. */
 export const DEFAULT_COHUB_STREAM_IDLE_TIMEOUT_MS = 300_000
 const STREAM_IDLE_TIMEOUT_CODE = 'LLM_STREAM_IDLE_TIMEOUT'
 const NO_RETRY: ResolvedRetryPolicy = resolveRetryPolicy({
@@ -124,6 +127,7 @@ export class CohubAdapter extends LlmAdapter {
     this.requestFetch = config.fetch ?? globalThis.fetch
   }
 
+  /** Abort adapter-owned catalog and completion requests. */
   close(): void {
     this.lifetime.abort(new Error('llm-cohub: adapter disposed'))
   }
@@ -144,6 +148,10 @@ export class CohubAdapter extends LlmAdapter {
     return Object.freeze(models.map(model => toModelInfo(model, imagesAvailable)))
   }
 
+  /**
+   * Resolve one Cohub model id against the current authenticated catalog.
+   * @param modelId - Cohub provider/model pair encoded by {@link cohubModelId}.
+   */
   override async resolveModel(
     provider: string,
     modelId: string,

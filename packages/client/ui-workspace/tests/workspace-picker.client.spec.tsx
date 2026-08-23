@@ -10,7 +10,7 @@ import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from '../src/clien
 import type {
   RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
+import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { zh } from '../src/client/locales.ts'
 

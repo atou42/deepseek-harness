@@ -14,4 +14,4 @@
 
 ## 已知限制与后续工作
 
-Board 清单由独立的 Cohub Space Provider 发现。暂不提供 Board 编辑和私有二进制资源代理。
+- Board 清单由独立的 Cohub Space Provider 发现。暂不提供 Board 编辑和私有二进制资源代理。

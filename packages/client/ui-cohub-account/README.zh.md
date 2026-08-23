@@ -14,4 +14,4 @@
 
 ## 已知限制与后续工作
 
-本界面不列出 Space、模型、生成能力、Board、Work、Shell 或本地 Workspace。
+- 本界面不列出 Space、模型、生成能力、Board、Work、Shell 或本地 Workspace。

@@ -37,22 +37,36 @@ export type {
   CohubRemoteLogoutResult,
 } from './types.ts'
 
+/** Default Logto issuer used for Cohub device authorization. */
 export const DEFAULT_COHUB_AUTH_ISSUER = 'https://auth.neta.art'
+/** Default Cohub API origin used for profile and adapter requests. */
 export const DEFAULT_COHUB_API_BASE_URL = 'https://api.cohub.run'
+/** Public OAuth client identity registered for DSH. */
 export const DEFAULT_COHUB_AUTH_CLIENT_ID = 'f8d26cdlwx85b0e5l3om2'
+/** Default OAuth resource requested for Cohub API access. */
 export const DEFAULT_COHUB_AUTH_RESOURCE = 'https://api.talesofai'
+/** Default OAuth scope retained across login and refresh. */
 export const DEFAULT_COHUB_AUTH_SCOPE = 'openid profile email offline_access'
+/** Default credential reference that stores the private Cohub session. */
 export const DEFAULT_COHUB_SESSION_CREDENTIAL = 'COHUB_ACCOUNT_SESSION'
+/** Default lead time for refreshing an expiring access token. */
 export const DEFAULT_COHUB_REFRESH_SKEW_MS = 5 * 60 * 1000
 
 /** Loader-safe configuration. Secrets remain inside the credentials seam. */
 export interface Config {
+  /** Logto issuer origin. */
   issuer?: string
+  /** Cohub API origin. */
   apiBaseUrl?: string
+  /** Public OAuth client id. */
   clientId?: string
+  /** OAuth resource identifier. */
   resource?: string
+  /** Requested OAuth scopes. */
   scope?: string
+  /** DSH credential reference for the private serialized session. */
   sessionCredential?: string
+  /** Milliseconds before expiry at which access-token refresh begins. */
   refreshSkewMs?: number
 }
 
@@ -63,6 +77,7 @@ interface ResolvedConfig extends AccountProtocolConfig {
 
 /** No usable Cohub session is configured. */
 export class CohubAuthenticationRequiredError extends Error {
+  /** Stable account error code exposed to adapters. */
   readonly code: string = 'COHUB_AUTHENTICATION_REQUIRED'
 
   constructor(message = 'Cohub authentication is required') {
@@ -165,6 +180,7 @@ export class CohubAccountService extends TypertRemoteService {
   private closed = false
   private current: CohubAccountSnapshot = Object.freeze({ revision: 0, status: 'anonymous' })
 
+  /** Token-free account state observable for Host and browser adapters. */
   readonly snapshot: CohubAccountObservable = {
     getSnapshot: () => this.current,
     subscribe: (listener) => {
@@ -197,49 +213,76 @@ export class CohubAccountService extends TypertRemoteService {
     this.publishAuthenticated(this.session)
   }
 
-  /** Return the current browser-safe account state. */
+  /**
+   * Return the current browser-safe account state.
+   * @returns Token-free state for browser consumers.
+   * @throws When the service is disposed.
+   */
   @Remote('getAccount')
   getAccount(): CohubAccountSnapshot {
     this.assertOpen()
     return this.current
   }
 
-  /** Start device login without exposing the private device code. */
+  /**
+   * Start device login without exposing the private device code.
+   * @returns The public authenticating state after Cohub accepts the device request.
+   */
   @Remote('beginLogin')
   async beginRemoteLogin(): Promise<CohubAccountSnapshot> {
     await this.beginLogin()
     return this.current
   }
 
-  /** Advance device login once; the browser controls no tokens or credentials. */
+  /**
+   * Advance device login once; the browser controls no tokens or credentials.
+   * @returns The public state after this poll settles.
+   */
   @Remote('pollLogin')
   async pollRemoteLogin(): Promise<CohubAccountSnapshot> {
     await this.pollLogin()
     return this.current
   }
 
-  /** Cancel the active device login and return the resulting public state. */
+  /**
+   * Cancel the active device login and return the resulting public state.
+   * @returns The restored anonymous or authenticated state.
+   */
   @Remote('cancelLogin')
   cancelRemoteLogin(): CohubAccountSnapshot {
     this.cancelLogin()
     return this.current
   }
 
-  /** Clear the Host-owned session and report any remote revocation warning. */
+  /**
+   * Clear the Host-owned session and report any remote revocation warning.
+   * @returns The anonymous public state and an optional remote revocation warning.
+   */
   @Remote('logout')
   async logoutRemote(): Promise<CohubRemoteLogoutResult> {
     const result = await this.logout()
     return Object.freeze({ snapshot: this.current, ...result })
   }
 
+  /**
+   * Start one Cohub device authorization flow.
+   * @param signal - Optional caller cancellation.
+   * @returns Public verification details; the private device code remains Host-owned.
+   */
   beginLogin(signal?: AbortSignal): Promise<CohubDeviceAuthorization> {
     return this.track(this.beginLoginImpl(signal))
   }
 
+  /**
+   * Poll the active device authorization once.
+   * @param signal - Optional caller cancellation.
+   * @returns The pending, slow-down, authenticated, or terminal authorization result.
+   */
   pollLogin(signal?: AbortSignal): Promise<CohubLoginPollResult> {
     return this.track(this.pollLoginImpl(signal))
   }
 
+  /** Cancel the active device authorization and restore the preceding account state. */
   cancelLogin(): void {
     this.assertOpen()
     if (this.pending === undefined) return
@@ -250,6 +293,11 @@ export class CohubAccountService extends TypertRemoteService {
     else this.publishAuthenticated(this.session)
   }
 
+  /**
+   * Resolve a usable Cohub access token, refreshing the private session when required.
+   * @returns A current access token owned by the calling Host adapter.
+   * @throws When authentication is absent, refresh is rejected, or the service is disposed.
+   */
   getAccessToken(): Promise<string> {
     this.assertOpen()
     const session = this.session
@@ -267,6 +315,10 @@ export class CohubAccountService extends TypertRemoteService {
     return flight
   }
 
+  /**
+   * Clear the local private session before attempting remote token revocation.
+   * @returns An optional warning when remote revocation fails after local logout succeeds.
+   */
   logout(): Promise<CohubLogoutResult> {
     return this.track(this.logoutImpl())
   }

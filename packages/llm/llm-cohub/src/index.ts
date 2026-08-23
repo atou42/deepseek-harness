@@ -28,9 +28,13 @@ export type { CohubCatalogModel } from './protocol.ts'
 export const name = 'llm-cohub'
 export const inject = ['llm', 'cohubAccount']
 
+/** Cohub LLM route configuration. */
 export interface Config {
+  /** Cohub API origin. */
   apiBaseUrl?: string
+  /** Cohub Space that owns raw completion requests. */
   spaceId: string
+  /** Maximum silence between completion stream events in milliseconds. */
   streamIdleTimeoutMs?: number
 }
 
@@ -58,6 +62,11 @@ function normalizeUrl(value: string): string {
   return parsed.toString().replace(/\/$/, '')
 }
 
+/**
+ * Validate Cohub LLM connection configuration.
+ * @param config - Loader configuration.
+ * @returns Immutable request coordinates.
+ */
 export function resolveConnection(config: Config): CohubConnectionOptions {
   const streamIdleTimeoutMs = config.streamIdleTimeoutMs ?? DEFAULT_COHUB_STREAM_IDLE_TIMEOUT_MS
   if (!Number.isFinite(streamIdleTimeoutMs) || streamIdleTimeoutMs <= 0 || streamIdleTimeoutMs > MAX_TIMER_DELAY_MS) {

@@ -10,6 +10,12 @@ import {
   parseUsage,
 } from './protocol.ts'
 
+/**
+ * Decode Cohub SSE data frames into JSON values.
+ * @param stream - HTTP response body.
+ * @param onComment - Optional activity callback for SSE comments.
+ * @returns Decoded event values.
+ */
 export async function* parseCohubSse(
   stream: ReadableStream<BufferSource>,
   onComment?: (comment: string) => void,
@@ -51,7 +57,12 @@ function apiEventError(code: string, message: string): LlmError {
   return new LlmError(message, `COHUB_${code.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`)
 }
 
-/** Translate Cohub events, requiring a self-consistent terminal `done` event. */
+/**
+ * Translate Cohub events, requiring a self-consistent terminal `done` event.
+ * @param values - Decoded Cohub event values.
+ * @param expected - Provider/model identity sent in the request.
+ * @returns DSH stream chunks.
+ */
 export async function* translateCohubEvents(
   values: AsyncIterable<unknown>,
   expected: { provider: string; model: string },

@@ -14,6 +14,7 @@ async function bench() {
   const slots = ctx.get('slots') as SlotRegistry
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
+  locale.setLocale('zh')
   const snapshot = { getSnapshot: () => ({ revision: 0, sources: [] }), subscribe: () => () => {} }
   const list = vi.fn()
   const activate = vi.fn()

@@ -9,12 +9,15 @@ import type {
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
 
+/** DSH provider route registered by the Cohub adapter. */
 export const COHUB_PROVIDER_ROUTE = 'cohub'
 
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+/** Cohub reasoning level accepted by raw completions. */
 export type CohubThinkingLevel = typeof THINKING_LEVELS[number]
 const THINKING_LEVEL_SET = new Set<string>(THINKING_LEVELS)
 
+/** One validated Cohub catalog model. */
 export interface CohubCatalogModel {
   readonly provider: string
   readonly id: string
@@ -28,6 +31,7 @@ export interface CohubCatalogModel {
   readonly thinkingLevelMap?: Readonly<Partial<Record<CohubThinkingLevel, string | null>>>
 }
 
+/** Content block accepted by the Cohub completion endpoint. */
 export type CohubContentBlock =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
@@ -38,11 +42,13 @@ export type CohubContentBlock =
       | { type: 'base64'; media_type: string; data: string }
   }
 
+/** One Cohub completion-history message. */
 export interface CohubCompletionMessage {
   readonly role: 'user' | 'assistant' | 'system'
   readonly content: CohubContentBlock[]
 }
 
+/** Streaming Cohub raw-completion request. */
 export interface CohubCompletionRequest {
   readonly provider: string
   readonly model: string
@@ -53,6 +59,7 @@ export interface CohubCompletionRequest {
   readonly thinkingLevel?: CohubThinkingLevel
 }
 
+/** Validated event in a Cohub completion stream. */
 export type CohubStreamEvent =
   | {
     type: 'meta'
@@ -72,6 +79,7 @@ export type CohubStreamEvent =
   }
   | { type: 'error'; code: string; message: string; completionId?: string | null }
 
+/** Cohub token and cost counters before DSH normalization. */
 export interface CohubUsage {
   readonly input?: number
   readonly output?: number
@@ -81,6 +89,7 @@ export interface CohubUsage {
   readonly cost?: unknown
 }
 
+/** Terminal assistant message carried by a Cohub done event. */
 export interface CohubAssistantMessage {
   readonly role: 'assistant'
   readonly content: readonly (
@@ -151,7 +160,12 @@ function parseInput(value: unknown, field: string): readonly ('text' | 'image')[
   return Object.freeze(input)
 }
 
-/** Encode the Cohub provider/model pair into one unambiguous DSH model id. */
+/**
+ * Encode the Cohub provider/model pair into one unambiguous DSH model id.
+ * @param provider - Cohub catalog provider id.
+ * @param model - Provider-local model id.
+ * @returns Encoded DSH model id.
+ */
 export function cohubModelId(provider: string, model: string): string {
   if (provider.trim().length === 0 || model.trim().length === 0) {
     throw new TypeError('llm-cohub: provider and model must be non-blank strings')
@@ -159,7 +173,11 @@ export function cohubModelId(provider: string, model: string): string {
   return JSON.stringify([provider, model])
 }
 
-/** Decode a model id advertised by this adapter. */
+/**
+ * Decode a model id advertised by this adapter.
+ * @param value - Encoded DSH model id.
+ * @returns Cohub provider and provider-local model ids.
+ */
 export function parseCohubModelId(value: string): { provider: string; model: string } {
   let parsed: unknown
   try {
@@ -175,7 +193,11 @@ export function parseCohubModelId(value: string): { provider: string; model: str
   return { provider: parsed[0], model: parsed[1] }
 }
 
-/** Validate the authenticated `/api/models` response without accepting partial bad state. */
+/**
+ * Validate the authenticated `/api/models` response without accepting partial bad state.
+ * @param value - Untrusted catalog response.
+ * @returns Immutable visible Cohub models.
+ */
 export function parseCatalog(value: unknown): readonly CohubCatalogModel[] {
   const grouped = record(value, 'models response')
   const result: CohubCatalogModel[] = []
@@ -238,6 +260,12 @@ function supportedModalities(model: CohubCatalogModel, imagesAvailable: boolean)
   return Object.freeze(result)
 }
 
+/**
+ * Project a Cohub catalog record into list-level DSH model metadata.
+ * @param model - Validated Cohub model.
+ * @param imagesAvailable - Whether durable image resolution is installed.
+ * @returns DSH model metadata.
+ */
 export function toModelInfo(model: CohubCatalogModel, imagesAvailable: boolean): LlmModelInfo {
   return Object.freeze({
     provider: COHUB_PROVIDER_ROUTE,
@@ -262,6 +290,12 @@ function reasoningInfo(model: CohubCatalogModel): LlmResolvedModelInfo['reasonin
   })
 }
 
+/**
+ * Project a Cohub catalog record into exact DSH route metadata.
+ * @param model - Validated Cohub model.
+ * @param imagesAvailable - Whether durable image resolution is installed.
+ * @returns Resolved DSH model metadata.
+ */
 export function toResolvedModelInfo(model: CohubCatalogModel, imagesAvailable: boolean): LlmResolvedModelInfo {
   const reasoning = reasoningInfo(model)
   return Object.freeze({
@@ -272,6 +306,11 @@ export function toResolvedModelInfo(model: CohubCatalogModel, imagesAvailable: b
   })
 }
 
+/**
+ * Validate and normalize Cohub usage counters.
+ * @param value - Untrusted usage payload.
+ * @returns DSH token usage.
+ */
 export function parseUsage(value: unknown): TokenUsage {
   const usage = record(value, 'usage')
   const input = usage.input === undefined ? 0 : nonNegativeInteger(usage.input, 'usage.input')
@@ -287,6 +326,11 @@ export function parseUsage(value: unknown): TokenUsage {
   })
 }
 
+/**
+ * Validate a terminal Cohub assistant message.
+ * @param value - Untrusted message payload.
+ * @returns Validated assistant message.
+ */
 export function parseAssistantMessage(value: unknown): CohubAssistantMessage {
   const message = record(value, 'done.message')
   if (message.role !== 'assistant') malformed('done.message.role must be assistant')
@@ -325,6 +369,11 @@ export function parseAssistantMessage(value: unknown): CohubAssistantMessage {
   })
 }
 
+/**
+ * Translate Cohub stop metadata into the DSH finish vocabulary.
+ * @param message - Validated terminal assistant message.
+ * @returns DSH finish reason.
+ */
 export function finishReason(message: CohubAssistantMessage): FinishReason {
   if (message.stopReason === 'stop') return { kind: 'stop' }
   if (message.stopReason === 'length') return { kind: 'max-tokens' }
@@ -335,6 +384,11 @@ export function finishReason(message: CohubAssistantMessage): FinishReason {
   return message.stopReason === 'aborted' ? { kind: 'aborted', failure } : { kind: 'error', failure }
 }
 
+/**
+ * Validate one decoded Cohub stream event.
+ * @param value - Untrusted event payload.
+ * @returns Validated Cohub stream event.
+ */
 export function parseStreamEvent(value: unknown): CohubStreamEvent {
   const event = record(value, 'stream event')
   switch (event.type) {

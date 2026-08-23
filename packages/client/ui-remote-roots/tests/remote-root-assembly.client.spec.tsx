@@ -26,6 +26,9 @@ describe('remote roots through the assembled Workspace browser', () => {
     const runtime = await SlotTestRuntime.create()
     const locale = new LocaleRuntime(runtime.ctx)
     runtime.provide('locale', locale)
+    runtime.provide('connection', {
+      hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
+    } as never)
     runtime.slots.installLocale(locale)
     await runtime.ctx.plugin(RemoteRootsService).await()
     await runtime.root.declare(
@@ -74,6 +77,9 @@ describe('remote roots through the assembled Workspace browser', () => {
     const runtime = await SlotTestRuntime.create()
     const locale = new LocaleRuntime(runtime.ctx)
     runtime.provide('locale', locale)
+    runtime.provide('connection', {
+      hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
+    } as never)
     runtime.slots.installLocale(locale)
     await runtime.ctx.plugin(RemoteRootsService).await()
     await runtime.root.declare(

@@ -1,5 +1,6 @@
 import type { CohubAccountProfile, CohubDeviceAuthorization } from './types.ts'
 
+/** Effective OAuth and Cohub API coordinates retained with a session. */
 export interface AccountProtocolConfig {
   readonly issuer: string
   readonly apiBaseUrl: string
@@ -8,6 +9,7 @@ export interface AccountProtocolConfig {
   readonly scope: string
 }
 
+/** Complete private Cohub account session stored behind one credential reference. */
 export interface StoredCohubSession extends AccountProtocolConfig {
   readonly schemaVersion: 1
   readonly accessToken: string
@@ -16,11 +18,18 @@ export interface StoredCohubSession extends AccountProtocolConfig {
   readonly profile: CohubAccountProfile
 }
 
+/** Host-only device authorization state paired with its public projection. */
 export interface PendingDeviceAuthorization {
   readonly deviceCode: string
   readonly public: CohubDeviceAuthorization
 }
 
+/**
+ * Require a non-blank string.
+ * @param value - Untrusted value.
+ * @param field - Diagnostic field name.
+ * @returns The validated string.
+ */
 export function nonBlank(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new TypeError(`cohub-account: ${field} must be a non-blank string`)
@@ -48,6 +57,19 @@ function optionalString(value: unknown, field: string): string | undefined {
   return nonBlank(value, field)
 }
 
+/** Resolve the optional OAuth token scope; Cohub emits an empty string when the granted scope is unchanged. */
+function tokenScope(value: unknown, requested: string): string {
+  if (value === undefined || value === null) return requested
+  if (typeof value !== 'string') throw new TypeError('cohub-account: token scope must be a string')
+  return value.trim().length === 0 ? requested : value
+}
+
+/**
+ * Validate a device authorization response.
+ * @param value - Untrusted response body.
+ * @param now - Current Unix epoch milliseconds.
+ * @returns Private and public device authorization state.
+ */
 export function parseDeviceAuthorization(value: unknown, now: number): PendingDeviceAuthorization {
   const body = record(value, 'device authorization response')
   const verificationUri = nonBlank(body.verification_uri, 'verification_uri')
@@ -67,6 +89,11 @@ export function parseDeviceAuthorization(value: unknown, now: number): PendingDe
   })
 }
 
+/**
+ * Validate the current Cohub profile response.
+ * @param value - Untrusted profile response.
+ * @returns Browser-safe Cohub account profile.
+ */
 export function parseProfile(value: unknown): CohubAccountProfile {
   const user = record(value, 'profile response')
   const profile = user.profile === undefined ? {} : record(user.profile, 'profile response profile')
@@ -79,6 +106,15 @@ export function parseProfile(value: unknown): CohubAccountProfile {
   })
 }
 
+/**
+ * Validate a token response and construct the private stored session.
+ * @param value - Untrusted token response.
+ * @param config - Effective OAuth coordinates.
+ * @param now - Current Unix epoch milliseconds.
+ * @param profile - Validated Cohub profile.
+ * @param previous - Previous session whose refresh token may be retained.
+ * @returns Complete private Cohub session.
+ */
 export function parseTokenSession(
   value: unknown,
   config: AccountProtocolConfig,
@@ -98,7 +134,7 @@ export function parseTokenSession(
     apiBaseUrl: config.apiBaseUrl,
     clientId: config.clientId,
     resource: config.resource,
-    scope: optionalString(token.scope, 'token scope') ?? config.scope,
+    scope: tokenScope(token.scope, config.scope),
     accessToken: nonBlank(token.access_token, 'access_token'),
     refreshToken,
     accessTokenExpiresAt: now + positiveNumber(token.expires_in, 'expires_in') * 1000,
@@ -106,6 +142,11 @@ export function parseTokenSession(
   })
 }
 
+/**
+ * Parse and validate a serialized private Cohub session.
+ * @param text - Credential value.
+ * @returns Validated stored session.
+ */
 export function parseStoredSession(text: string): StoredCohubSession {
   let parsed: unknown
   try {
@@ -143,6 +184,11 @@ function parseProfileForStorage(value: unknown): CohubAccountProfile {
   })
 }
 
+/**
+ * Read an OAuth error code without accepting malformed containers.
+ * @param value - Untrusted OAuth response.
+ * @returns The non-empty error code when present.
+ */
 export function oauthErrorCode(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
   const code = (value as Record<string, unknown>).error

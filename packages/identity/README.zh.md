@@ -6,5 +6,5 @@
 
 | 包 | 职责 | ctx key |
 |---|---|---|
-| [`anonymous-user-id/`](anonymous-user-id/README.md) | 为遥测、反馈和 DeepSeek 请求持久化一个限定于 Harness home 的匿名关联 id | — |
-| [`cohub-account/`](cohub-account/README.md) | 负责一个 Host 侧 Cohub 登录、私有会话、刷新与登出生命周期 | `cohubAccount` |
+| [`anonymous-user-id/`](anonymous-user-id/README.zh.md) | 为遥测、反馈和 DeepSeek 请求持久化一个限定于 Harness home 的匿名关联 id | — |
+| [`cohub-account/`](cohub-account/README.zh.md) | 负责一个 Host 侧 Cohub 登录、私有会话、刷新与登出生命周期 | `cohubAccount` |

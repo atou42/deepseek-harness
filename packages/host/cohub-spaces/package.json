@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-cohub-spaces",
   "description": "Host adapter exposing Cohub Spaces, Sessions, and files through typed Remote methods",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.1-rc.2",
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",

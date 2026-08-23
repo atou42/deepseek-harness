@@ -30,13 +30,20 @@ export type * from './protocol.ts'
 
 export const name = 'cohub-generation'
 export const inject = ['tools', 'systemPrompt', 'cohubAccount']
+/** Default delay between Cohub generation task polls. */
 export const DEFAULT_COHUB_GENERATION_POLL_INTERVAL_MS = 1_500
+/** Default maximum time spent waiting for one Cohub generation task. */
 export const DEFAULT_COHUB_GENERATION_TIMEOUT_MS = 30 * 60 * 1_000
 
+/** Cohub generation plugin configuration. */
 export interface Config {
+  /** Cohub Space that owns generated tasks and outputs. */
   spaceId: string
+  /** Cohub API origin. */
   apiBaseUrl?: string
+  /** Delay between task-status polls in milliseconds. */
   pollIntervalMs?: number
+  /** Maximum generation wait in milliseconds. */
   timeoutMs?: number
 }
 
@@ -47,6 +54,7 @@ interface ResolvedConfig {
   readonly timeoutMs: number
 }
 
+/** One validated Cohub generation request. */
 export interface GenerateCohubOptions {
   readonly model: string
   readonly prompt: string
@@ -55,6 +63,7 @@ export interface GenerateCohubOptions {
   readonly meta?: Readonly<Record<string, JsonValue>>
 }
 
+/** Dependencies and configuration for a Cohub generation client. */
 export interface CohubGenerationClientOptions {
   readonly account: CohubAccountService
   readonly attachments: () => AttachmentStore | undefined
@@ -81,6 +90,7 @@ interface RawOutputBlock {
   readonly role?: string
 }
 
+/** Cohub generation HTTP rejection with normalized status and optional code. */
 export class CohubGenerationHttpError extends Error {
   constructor(
     readonly status: number,
@@ -92,6 +102,7 @@ export class CohubGenerationHttpError extends Error {
   }
 }
 
+/** Cohub generation failure that retains the billable task identity. */
 export class CohubGenerationTaskError extends Error {
   constructor(readonly taskRunId: string, message: string, options?: ErrorOptions) {
     super(`cohub-generation: ${message}; task ID: ${taskRunId}`, options)
@@ -180,6 +191,11 @@ function parseInputTypes(value: unknown, field: string): readonly ('text' | Gene
   return Object.freeze([...new Set(values)])
 }
 
+/**
+ * Validate a Cohub multimodal generation catalog.
+ * @param value - Untrusted API response.
+ * @returns An immutable model catalog.
+ */
 export function parseGenerationCatalog(value: unknown): readonly CohubGenerationModel[] {
   if (!Array.isArray(value)) throw new TypeError('cohub-generation: model catalog must be an array')
   const ids = new Set<string>()
@@ -384,18 +400,37 @@ export class CohubGenerationClient {
     this.requestFetch = options.fetch ?? globalThis.fetch
   }
 
+  /**
+   * List validated Cohub generation models.
+   * @param includeHidden - Include models marked hidden by Cohub.
+   * @param signal - Optional caller cancellation.
+   * @returns The immutable generation model catalog.
+   */
   listModels(includeHidden = false, signal?: AbortSignal): Promise<readonly CohubGenerationModel[]> {
     return this.track(this.listModelsImpl(includeHidden, signal))
   }
 
+  /**
+   * Create and wait for one Cohub generation task.
+   * @param input - Validated model, prompt, references, and parameters.
+   * @param signal - Optional caller cancellation.
+   * @returns The completed result with stored image attachments when available.
+   */
   generate(input: GenerateCohubOptions, signal?: AbortSignal): Promise<CohubGenerationResult> {
     return this.track(this.generateImpl(input, signal))
   }
 
+  /**
+   * Read one Cohub generation task status.
+   * @param taskRunId - Cohub task identity.
+   * @param signal - Optional caller cancellation.
+   * @returns The validated current task state.
+   */
   getTask(taskRunId: string, signal?: AbortSignal): Promise<CohubGenerationTaskStatus> {
     return this.track(this.getTaskImpl(nonBlank(taskRunId, 'taskRunId'), signal))
   }
 
+  /** Abort active requests and wait for client-owned work to settle. */
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true

@@ -14,4 +14,4 @@ None.
 
 ## Known Limitations and Deferred Work
 
-The first version browses manifests and renders Board nodes and connections. It does not edit Boards, publish Works, control playback, run Cohub Sessions, or proxy private binary assets.
+- The first version browses manifests and renders Board nodes and connections. It does not edit Boards, publish Works, control playback, run Cohub Sessions, or proxy private binary assets.

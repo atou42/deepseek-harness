@@ -14,4 +14,4 @@ None.
 
 ## Known Limitations and Deferred Work
 
-Board manifests are discovered through the separate Cohub Space provider. Board editing and private binary asset proxying are intentionally unavailable.
+- Board manifests are discovered through the separate Cohub Space provider. Board editing and private binary asset proxying are intentionally unavailable.

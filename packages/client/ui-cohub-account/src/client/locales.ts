@@ -1,5 +1,7 @@
+/** Locale namespace owned by the Cohub account UI. */
 export const NS = 'cohubAccount' as const
 
+/** Chinese Cohub account UI dictionary. */
 export const zh = {
   trigger: 'Cohub 账号', title: 'Cohub 账号', close: '关闭', loading: '正在读取账号…',
   anonymousTitle: '登录 Cohub', anonymousBody: '登录后，其他 Cohub 插件才能访问你的 Space、模型、生成能力和 Board。',
@@ -10,6 +12,7 @@ export const zh = {
   retry: '重试', error: '账号操作失败：{message}', revocationWarning: '本地账号已退出，但远端退出未能确认：{message}',
 } as const
 
+/** English Cohub account UI dictionary. */
 export const en: Record<keyof typeof zh, string> = {
   trigger: 'Cohub account', title: 'Cohub account', close: 'Close', loading: 'Loading account…',
   anonymousTitle: 'Sign in to Cohub', anonymousBody: 'Sign in before other Cohub plugins can use your Spaces, models, generation capabilities, or Boards.',
@@ -20,4 +23,5 @@ export const en: Record<keyof typeof zh, string> = {
   retry: 'Retry', error: 'Account operation failed: {message}', revocationWarning: 'Signed out locally, but remote revocation could not be confirmed: {message}',
 }
 
+/** Valid Cohub account UI dictionary key. */
 export type CohubAccountKey = keyof typeof zh

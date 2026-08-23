@@ -14,4 +14,4 @@ None.
 
 ## Known Limitations and Deferred Work
 
-The UI does not list Spaces, models, generation capabilities, Boards, Works, shells, or local Workspaces.
+- The UI does not list Spaces, models, generation capabilities, Boards, Works, shells, or local Workspaces.
