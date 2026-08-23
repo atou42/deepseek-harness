@@ -152,6 +152,21 @@ describe('CohubSpacesGateway', () => {
     })
   })
 
+  it('projects a null Cohub Session title as untitled without rejecting the whole Space', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({
+      sessions: [{
+        id: '62d0f404-a005-423a-811c-f58333415f03', spaceId: 'space-1', title: null, status: 'active',
+        latestMessageText: null, updatedAt: '2026-08-23T10:00:00.000Z',
+      }],
+      pageInfo: { hasMore: false, nextCursor: null },
+    })))
+    const { spaces } = await boot()
+
+    await expect(spaces.listSessions('space-1')).resolves.toMatchObject({
+      sessions: [{ id: '62d0f404-a005-423a-811c-f58333415f03', title: '' }],
+    })
+  })
+
   it('binds Cohub tools and context onto the existing DSH Agent without calling Cohub Agent', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json([{ id: 'space-1', title: 'deepseek harness' }]))

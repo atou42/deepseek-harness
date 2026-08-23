@@ -233,11 +233,6 @@ function optionalText(value: unknown, field: string): string | undefined {
   return value
 }
 
-function text(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw new TypeError(`cohub-spaces: ${field} must be a string`)
-  return value
-}
-
 function isoInstant(value: unknown, field: string): string {
   const instant = nonBlank(value, field)
   if (!Number.isFinite(Date.parse(instant))) throw new TypeError(`cohub-spaces: ${field} must be an ISO-8601 instant`)
@@ -254,7 +249,7 @@ function parseSession(value: unknown, spaceId: string, field: string): CohubSess
   return Object.freeze({
     id,
     spaceId,
-    title: text(session.title, `session "${id}" title`),
+    title: optionalText(session.title, `session "${id}" title`) ?? '',
     status: nonBlank(session.status, `session "${id}" status`),
     ...latestMessageText === undefined ? {} : { latestMessageText },
     updatedAt: isoInstant(session.updatedAt, `session "${id}" updatedAt`),
