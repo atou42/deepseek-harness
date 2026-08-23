@@ -10,7 +10,195 @@ The extensions subsystem lets an agent define versioned Cordis packages, run the
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxcohubaccount--cohubaccountservice"></a>
+
+### `ctx.cohubAccount` — `CohubAccountService`
+
+The only owner of Cohub account secrets and token refresh within one Host.
+
+```ts cordis-catalog
+/**
+ * Return the current browser-safe account state.
+ * @returns Token-free state for browser consumers.
+ * @throws When the service is disposed.
+ */
+@Remote('getAccount') getAccount(): CohubAccountSnapshot
+
+/**
+ * Start device login without exposing the private device code.
+ * @returns The public authenticating state after Cohub accepts the device request.
+ */
+@Remote('beginLogin') async beginRemoteLogin(): Promise<CohubAccountSnapshot>
+
+/**
+ * Advance device login once; the browser controls no tokens or credentials.
+ * @returns The public state after this poll settles.
+ */
+@Remote('pollLogin') async pollRemoteLogin(): Promise<CohubAccountSnapshot>
+
+/**
+ * Cancel the active device login and return the resulting public state.
+ * @returns The restored anonymous or authenticated state.
+ */
+@Remote('cancelLogin') cancelRemoteLogin(): CohubAccountSnapshot
+
+/**
+ * Clear the Host-owned session and report any remote revocation warning.
+ * @returns The anonymous public state and an optional remote revocation warning.
+ */
+@Remote('logout') async logoutRemote(): Promise<CohubRemoteLogoutResult>
+
+/**
+ * Start one Cohub device authorization flow.
+ * @param signal - Optional caller cancellation.
+ * @returns Public verification details; the private device code remains Host-owned.
+ */
+beginLogin(signal?: AbortSignal): Promise<CohubDeviceAuthorization>
+
+/**
+ * Poll the active device authorization once.
+ * @param signal - Optional caller cancellation.
+ * @returns The pending, slow-down, authenticated, or terminal authorization result.
+ */
+pollLogin(signal?: AbortSignal): Promise<CohubLoginPollResult>
+
+/** Cancel the active device authorization and restore the preceding account state. */
+cancelLogin(): void
+
+/**
+ * Resolve a usable Cohub access token, refreshing the private session when required.
+ * @returns A current access token owned by the calling Host adapter.
+ * @throws When authentication is absent, refresh is rejected, or the service is disposed.
+ */
+getAccessToken(): Promise<string>
+
+/**
+ * Clear the local private session before attempting remote token revocation.
+ * @returns An optional warning when remote revocation fails after local logout succeeds.
+ */
+logout(): Promise<CohubLogoutResult>
+```
+
+Source: [`packages/identity/cohub-account/src/index.ts`](../../packages/identity/cohub-account/src/index.ts)
+
+<a id="ctxcohubboard--cohubboardgateway"></a>
+
+### `ctx.cohubBoard` — `CohubBoardGateway`
+
+The only capability is exact, authenticated Board inspection.
+
+```ts cordis-catalog
+/**
+ * Read one authenticated Cohub Board with its nodes and connections.
+ * @param spaceId - Owning Cohub Space id.
+ * @param boardId - Board id within that Space.
+ * @returns The validated Board snapshot.
+ * @throws When ids are invalid, authentication fails, Cohub rejects the request, or the service is disposed.
+ */
+@Remote('getBoard') getBoard(spaceId: string, boardId: string): Promise<CohubBoardSnapshot>
+```
+
+Source: [`packages/host/cohub-board/src/index.ts`](../../packages/host/cohub-board/src/index.ts)
+
+<a id="ctxcohubspaces--cohubspacesgateway"></a>
+
+### `ctx.cohubSpaces` — `CohubSpacesGateway`
+
+Typed Remote service backed only by Cohub account tokens and platform HTTP.
+
+```ts cordis-catalog
+/**
+ * List all Spaces accessible to the current account.
+ * @returns The authenticated account's Spaces.
+ */
+@Remote('listSpaces') listSpaces(): Promise<readonly CohubSpaceView[]>
+
+/**
+ * List the native Cohub Agent text-model catalog.
+ * @returns The provider-grouped Cohub model catalog.
+ */
+@Remote('listModels') listModels(): Promise<CohubModelCatalog>
+
+/**
+ * List every conversation in one Space, following the platform cursor.
+ * @param spaceId Cohub Space identity.
+ * @returns The complete Session listing.
+ */
+@Remote('listSessions') listSessions(spaceId: string): Promise<CohubSpaceSessionList>
+
+/**
+ * Read all currently retained Turns for one Cohub Session.
+ * @param spaceId Cohub Space identity.
+ * @param sessionId Cohub Session identity.
+ * @returns The complete retained conversation view.
+ */
+@Remote('getConversation') getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView>
+
+/**
+ * Submit one prompt directly to Cohub Agent, creating a Session when sessionId is null.
+ * @param spaceId Cohub Space identity.
+ * @param sessionId Existing Cohub Session identity, or null for a new Session.
+ * @param content User-authored text.
+ * @param clientMessageId Caller-generated idempotency identity.
+ * @param selection Optional model and thinking-effort override for this Turn.
+ * @returns The Cohub-owned Session and accepted Turn.
+ */
+@Remote('sendPrompt') sendPrompt( spaceId: string, sessionId: string | null, content: string, clientMessageId: string, selection?: CohubPromptSelection, ): Promise<CohubPromptSubmission>
+
+/**
+ * Abort one running native Cohub Agent Turn after verifying its Space ownership.
+ * @param spaceId Cohub Space identity.
+ * @param sessionId Cohub Session identity.
+ * @param turnId Cohub Turn identity.
+ * @returns Confirmation that Cohub accepted the abort.
+ */
+@Remote('abortTurn') abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<CohubAbortTurnResult>
+
+/**
+ * Resolve the local DSH working directory used for a Cohub-bound Session.
+ * @param spaceId Cohub Space identity.
+ * @returns The verified Space identity and local cwd anchor.
+ */
+@Remote('getDshSessionStart') getDshSessionStart(spaceId: string): Promise<CohubDshSessionStart>
+
+/**
+ * Attach one Cohub Space to an existing blank DSH Session.
+ * @param spaceId Cohub Space identity.
+ * @param dshSessionId Blank DSH Session identity.
+ * @returns The installed binding.
+ */
+@Remote('bindDshSession') bindDshSession(spaceId: string, dshSessionId: string): Promise<CohubDshSessionBinding>
+
+/**
+ * List one exact Space-relative directory.
+ * @param spaceId Cohub Space identity.
+ * @param path Space-relative directory path.
+ * @returns The exact directory listing.
+ */
+@Remote('listDirectory') listDirectory(spaceId: string, path: string): Promise<CohubSpaceDirectory>
+
+/**
+ * Read one inline UTF-8 text file.
+ * @param spaceId Cohub Space identity.
+ * @param path Space-relative file path.
+ * @returns The file content and revision.
+ */
+@Remote('readText') readText(spaceId: string, path: string): Promise<CohubSpaceTextFile>
+
+/**
+ * Compare-and-set one UTF-8 text file.
+ * @param spaceId Cohub Space identity.
+ * @param path Space-relative file path.
+ * @param content Replacement UTF-8 content.
+ * @param ifRevision Required current revision.
+ * @returns The new file or a version conflict.
+ */
+@Remote('writeText') writeText(spaceId: string, path: string, content: string, ifRevision: string): Promise<CohubSpaceWriteResult>
+```
+
+Source: [`packages/host/cohub-spaces/src/index.ts`](../../packages/host/cohub-spaces/src/index.ts)
 
 <a id="ctxcordisinspect--cordisinspectregistryservice"></a>
 
@@ -62,7 +250,7 @@ resolveClientQuery( agent: Agent, requestId: CordisInspectRequestId, resolution:
 
 Types: [Agent](core.md)
 
-Source: [`packages/extensions/cordis-host-runner/src/inspect-registry.ts:46`](../../packages/extensions/cordis-host-runner/src/inspect-registry.ts)
+Source: [`packages/extensions/cordis-host-runner/src/inspect-registry.ts`](../../packages/extensions/cordis-host-runner/src/inspect-registry.ts)
 
 <a id="ctxdynamiccordisrunner--dynamiccordisrunnerservice"></a>
 
@@ -254,7 +442,27 @@ inspectPackage( agent: Agent, pluginId: CordisDynamicPluginId, packageId: Cordis
 
 Types: [Agent](core.md)
 
-Source: [`packages/extensions/cordis-host-runner/src/index.ts:124`](../../packages/extensions/cordis-host-runner/src/index.ts)
+Source: [`packages/extensions/cordis-host-runner/src/index.ts`](../../packages/extensions/cordis-host-runner/src/index.ts)
+
+<a id="cohub-spaces-events"></a>
+
+### `cohub-spaces/*` events
+
+<a id="cohub-spaceschanged--emit"></a>
+
+#### `cohub-spaces/changed` — emit
+
+The account state changed; browser-side Space sources should refresh.
+
+```ts cordis-catalog
+/**
+ * The account state changed; browser-side Space sources should refresh.
+ * @mode emit
+ */
+'cohub-spaces/changed'(): void
+```
+
+Source: [`packages/host/cohub-spaces/src/types.ts`](../../packages/host/cohub-spaces/src/types.ts)
 
 <a id="cordis-events"></a>
 
@@ -275,7 +483,7 @@ One exact Plugin/Package activation is now live in the Host.
 'cordis/dynamic-package'(pkg: DynamicCordisPackage): void
 ```
 
-Source: [`packages/extensions/cordis-host-runner/src/types.ts:379`](../../packages/extensions/cordis-host-runner/src/types.ts)
+Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
 
 <a id="cordisdynamic-retract--emit"></a>
 
@@ -292,7 +500,7 @@ One exact activation was withdrawn.
 'cordis/dynamic-retract'(retracted: DynamicCordisRetracted): void
 ```
 
-Source: [`packages/extensions/cordis-host-runner/src/types.ts:385`](../../packages/extensions/cordis-host-runner/src/types.ts)
+Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
 
 <a id="cordisinspect-query--emit"></a>
 
@@ -309,7 +517,7 @@ Request a live read-only query from the Client inspect registry.
 'cordis/inspect-query'(request: CordisInspectQueryRequest): void
 ```
 
-Source: [`packages/extensions/cordis-host-runner/src/types.ts:391`](../../packages/extensions/cordis-host-runner/src/types.ts)
+Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
 
 <a id="cordisinspect-query-resolved--emit"></a>
 
@@ -326,7 +534,7 @@ Notify every Client that an inspect query has settled or been cancelled.
 'cordis/inspect-query-resolved'(resolved: CordisInspectQueryResolved): void
 ```
 
-Source: [`packages/extensions/cordis-host-runner/src/types.ts:397`](../../packages/extensions/cordis-host-runner/src/types.ts)
+Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
 
 <a id="cordisrequest-run--emit"></a>
 
@@ -343,7 +551,7 @@ A Client-bearing activation needs a browser page, and may require a user decisio
 'cordis/request-run'(request: DynamicCordisRunRequest): void
 ```
 
-Source: [`packages/extensions/cordis-host-runner/src/types.ts:367`](../../packages/extensions/cordis-host-runner/src/types.ts)
+Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
 
 <a id="cordisrequest-run-resolved--emit"></a>
 
@@ -360,5 +568,5 @@ A pending Client activation request left the answerable state.
 'cordis/request-run-resolved'(resolved: DynamicCordisRequestResolved): void
 ```
 
-Source: [`packages/extensions/cordis-host-runner/src/types.ts:373`](../../packages/extensions/cordis-host-runner/src/types.ts)
+Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
 <!-- END GENERATED cordis-surface -->

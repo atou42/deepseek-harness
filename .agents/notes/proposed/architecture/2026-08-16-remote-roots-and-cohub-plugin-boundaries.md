@@ -1,0 +1,38 @@
+# Agent Note: Remote roots and Cohub plugin boundaries
+
+Status: proposed
+
+English | [中文](2026-08-16-remote-roots-and-cohub-plugin-boundaries.zh.md)
+
+## Problem
+
+Cloud workspaces should be discoverable in the DSH navigation without pretending that a remote provider is a local Workspace directory. Reusing Workspace paths would incorrectly move Session cwd and imply that Shell and filesystem services share the remote execution world. Coupling Cohub login, files, models, generated assets, and Board into one plugin would also make identity-free UI impossible to reuse.
+
+## Proposal
+
+Introduce a generic client-side remote-root registry. Each source publishes explicitly marked roots and operates on provider-owned opaque identifiers. The contract has no local path and does not create or mutate DSH Workspaces. Browse, read, and compare-and-set write are callbacks behind the source boundary. Registration is unique by source id, malformed snapshots fail loudly, and Cordis disposal withdraws the source and its subscriptions.
+
+Provider snapshots and list/read/write results are copied and deeply frozen at this boundary. Returned root and file identities must match the request, directory entries must be structurally valid and unique, and write outcomes must be either a valid success or an explicit version conflict. Invalid provider data fails before presentation state can observe it.
+
+Cohub remains outside this generic package. One host-side Cohub Account capability will own credentials and session lifecycle. Separate Cohub adapters will expose Space files, model access, generation, and Board through generic seams. Identity-free tree, file, Board, and result presentation packages will depend only on those seams. An optional bundle may compose leaves but may not become a second owner of state.
+
+`@deepseek-ai/dsh-cohub-account` realizes that single owner on the Host. It keeps the private device code and access/refresh tokens behind one DSH credential reference, exposes only a token-free profile and device authorization snapshot, single-flights refresh, preserves transient failures for retry, clears unrecoverable sessions, and prevents late login or refresh work from reversing logout or unload. It implements the standards-based HTTP exchange directly and does not depend on the Cohub CLI or SDK.
+
+The Workspace browser owns only one empty-share child slot that places remote roots beside local rows. `@deepseek-ai/dsh-client-ui-remote-roots` occupies it independently, observes the generic registry, renders each marked root as a folder, and lazily lists children through opaque identifiers. It cancels a request when its folder closes, ignores late completion, surfaces provider errors with retry, and unregisters its entire surface on unload. Local Session search hides the remote tree instead of claiming to search it.
+
+## Acceptance criteria
+
+Tests prove duplicate rejection, malformed-publication failure, opaque-ID routing, explicit write conflicts, source withdrawal, late provider updates after unload doing nothing, local Workspace regression coverage, anonymous generic UI behavior, authentication failure behavior, and a real composed Cohub flow in an isolated Harness home.
+
+## Risks
+
+Remote roots can look folder-like while remaining semantically distinct from Workspace, cwd, and Shell. More packages and explicit dependency edges are required, and Board and generated assets need their own contracts instead of being smuggled through the file tree.
+
+## Consequences
+
+Remote roots can look folder-like while remaining semantically distinct from Workspace, cwd, and Shell. Other cloud providers can reuse the same UI. More packages and explicit dependency edges are required, but each capability can load and unload independently. Board and generated assets need their own contracts instead of being smuggled through the file tree.
+
+## Alternatives considered
+
+Adding a `cohub://` path to Workspace was rejected because it would violate existing cwd and execution-world semantics. Mounting an iframe was rejected because Cohub would own the surrounding authentication and UI lifecycle. A single all-in-one Cohub plugin was rejected because generic presentation would become login-dependent and leaf capabilities could not unload independently.
+

@@ -1,0 +1,13 @@
+- insert:
+    - id: cohub-account-native-snapshot
+      name: '@deepseek-ai/dsh-cohub-account'
+      config:
+        apiBaseUrl: !!js process.env.DSH_COHUB_TEST_API_BASE_URL
+
+    - id: cohub-spaces-native-snapshot
+      name: '@deepseek-ai/dsh-cohub-spaces'
+      config:
+        apiBaseUrl: !!js process.env.DSH_COHUB_TEST_API_BASE_URL
+
+    - id: client-cohub-spaces-native-snapshot
+      name: '@deepseek-ai/dsh-client-cohub-spaces'

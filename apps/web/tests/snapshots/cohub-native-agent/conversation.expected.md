@@ -1,0 +1,22 @@
+- main "Cohub conversation":
+  - heading "Native cloud Session" [level=2]
+  - text: Cohub Agent · Cloud
+  - button "Close Cohub conversation":
+    - img
+  - text: Chat
+  - article:
+    - text: Run in cloud
+    - button "Think Inspecting the cloud workspace.":
+      - img
+      - img
+      - text: Think Inspecting the cloud workspace.
+    - button "Bash /workspace":
+      - img
+      - img
+      - text: Bash /workspace
+    - paragraph: This answer is persisted by Cohub.
+  - textbox "Send to Cohub Agent":
+    - /placeholder: Message Cohub Agent
+  - 'button "Choose Cohub model: DeepSeek V4 Pro"': DeepSeek V4 Pro
+  - button "Send" [disabled]:
+    - img

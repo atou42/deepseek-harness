@@ -1,0 +1,33 @@
+# Cohub Space-local preview composition.
+# This overlay is loaded only by the isolated preview process. It does not
+# modify the shipped web profile or the daily-use DSH process.
+- insert:
+    - id: cohub-account-preview
+      name: '@deepseek-ai/dsh-cohub-account'
+
+    - id: cohub-spaces-preview
+      name: '@deepseek-ai/dsh-cohub-spaces'
+
+    - id: cohub-board-preview
+      name: '@deepseek-ai/dsh-cohub-board'
+
+    - id: llm-cohub-preview
+      name: '@deepseek-ai/dsh-llm-cohub'
+      config:
+        spaceId: dec69421-9f80-46f7-80c4-7e09ca0c507f
+
+    - id: cohub-generation-preview
+      name: '@deepseek-ai/dsh-cohub-generation'
+      config:
+        spaceId: dec69421-9f80-46f7-80c4-7e09ca0c507f
+
+    # Browser packages remain separate rows so each surface can be removed
+    # without disabling account ownership or another Cohub capability.
+    - id: client-cohub-spaces-preview
+      name: '@deepseek-ai/dsh-client-cohub-spaces'
+
+    - id: ui-cohub-account-preview
+      name: '@deepseek-ai/dsh-client-cohub-account'
+
+    - id: ui-cohub-board-preview
+      name: '@deepseek-ai/dsh-client-cohub-board'

@@ -7,7 +7,10 @@ import type {
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from '../src/client/contract/slots.ts'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
+import type {
+  RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
+import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { zh } from '../src/client/locales.ts'
 
@@ -34,6 +37,7 @@ const workspaceState = (items: readonly WorkspaceView[]): WorkspaceListState => 
   items, archivedSessionIds: [], state: 'idle', phase: 'ready', error: null, baselinesReady: true,
   recentWorkspaceId: items[0]?.workspaceId,
 })
+const emptyRemoteRoots: RemoteRootsSnapshot = { revision: 0, sources: [] }
 function anchor(): { current: HTMLElement } {
   const element = document.createElement('button')
   element.getBoundingClientRect = () => ({
@@ -81,9 +85,11 @@ function mount(
   items: readonly WorkspaceView[] = [workspace('alpha', 'Alpha')],
   createWorkspace = vi.fn(),
   occupancy = occupancySource(),
+  remoteRoots: RemoteRootsSnapshot = emptyRemoteRoots,
 ) {
   const onPick = vi.fn()
   const onClose = vi.fn()
+  const openRemoteConversation = vi.fn(async () => {})
   const anchorRef = anchor()
   const { probe, renderSlot } = flowProbe()
   const renderPicker = (nextItems: readonly WorkspaceView[]) => (
@@ -92,6 +98,8 @@ function mount(
       anchorRef={anchorRef}
       useSessions={hook(sessions)}
       useWorkspaces={hook(workspaceState(nextItems))}
+      useRemoteRoots={hook(remoteRoots)}
+      openRemoteConversation={openRemoteConversation}
       onPick={onPick}
       onClose={onClose}
       createWorkspace={createWorkspace}
@@ -104,16 +112,75 @@ function mount(
     renderPicker(items),
   )
   return {
-    view, onPick, onClose, createWorkspace, probe, occupancy,
+    view, onPick, onClose, openRemoteConversation, createWorkspace, probe, occupancy,
     rerenderItems: (nextItems: readonly WorkspaceView[]) => { view.rerender(renderPicker(nextItems)) },
   }
 }
 
 function chooseAdd(): void {
-  fireEvent.click(screen.getByRole('menuitem', { name: '添加工作区…' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '添加本地工作区…' }))
 }
 
 describe('WorkspacePicker', () => {
+  it('filters local Workspaces and Cohub Spaces from the picker search field', () => {
+    const remoteRoots: RemoteRootsSnapshot = {
+      revision: 1,
+      sources: [{
+        sourceId: 'cohub' as RemoteRootSourceId,
+        status: 'ready',
+        roots: [
+          {
+            id: 'research-space' as RemoteResourceId,
+            title: 'Studio Research Swarm',
+            marker: { kind: 'cloud', label: 'Cohub' },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: 'interactive' },
+          },
+          {
+            id: 'creator-space' as RemoteResourceId,
+            title: 'CreatorHub',
+            marker: { kind: 'cloud', label: 'Cohub' },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: 'interactive' },
+          },
+        ],
+      }],
+    }
+    mount([workspace('alpha', 'Alpha Project')], vi.fn(), occupancySource(), remoteRoots)
+
+    const search = screen.getByRole('searchbox', { name: '搜索工作区' })
+    fireEvent.change(search, { target: { value: 'research' } })
+
+    expect(screen.getByRole('menuitem', { name: 'Studio Research Swarm · Cohub' })).toBeTruthy()
+    expect(screen.queryByText(/DSH Agent/)).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'CreatorHub · Cohub' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Alpha Project' })).toBeNull()
+  })
+
+  it('offers only the cloud Cohub conversation for one Space', async () => {
+    const sourceId = 'cohub' as RemoteRootSourceId
+    const rootId = 'space-1' as RemoteResourceId
+    const remoteRoots: RemoteRootsSnapshot = {
+      revision: 1,
+      sources: [{
+        sourceId,
+        status: 'ready',
+        roots: [{
+          id: rootId,
+          title: 'deepseek harness',
+          marker: { kind: 'cloud', label: 'Cohub' },
+          capabilities: { browse: true, read: false, write: false, workspace: true, conversation: 'interactive' },
+        }],
+      }],
+    }
+    const b = mount([], vi.fn(), occupancySource(), remoteRoots)
+    expect(screen.queryByText(/DSH Agent/)).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'deepseek harness · Cohub' }))
+    expect(b.openRemoteConversation).toHaveBeenCalledWith(sourceId, rootId)
+    await waitFor(() => { expect(b.onClose).toHaveBeenCalled() })
+    expect(b.onPick).not.toHaveBeenCalled()
+    expect(b.createWorkspace).not.toHaveBeenCalled()
+
+  })
+
   it('lists same-title Workspaces separately and forwards the selected id', () => {
     const b = mount([workspace('alpha', 'Shared'), workspace('beta', 'Shared')])
     const entries = screen.getAllByRole('menuitem', { name: 'Shared' })
@@ -142,7 +209,7 @@ describe('WorkspacePicker', () => {
     // choice, so the owner's open request lands in the flow itself.
     const b = mount([])
     expect(screen.queryByRole('menu')).toBeNull()
-    expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '添加本地工作区…' })).toBeNull()
     expect(b.onClose).toHaveBeenCalled()
     expect(screen.getByTestId('directory-flow')).toBeTruthy()
   })
@@ -180,11 +247,11 @@ describe('WorkspacePicker', () => {
     // The flow is open but nothing is picked yet: a chooser pending on the
     // host display must already block concurrent workspace actions.
     expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Alpha' }).disabled).toBe(true)
-    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: '添加工作区…' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: '添加本地工作区…' }).disabled).toBe(true)
     act(() => { b.probe.owner!.onPicked('/tmp/project') })
     expect(b.probe.owner!.busy).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Alpha' }).disabled).toBe(true)
-    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: '添加工作区…' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: '添加本地工作区…' }).disabled).toBe(true)
     await act(async () => { resolve(created); await pending })
     expect(b.probe.owner!.busy).toBe(false)
   })
@@ -211,6 +278,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open useSessions={hook(sessions)} useWorkspaces={hook(workspaceState([workspace('alpha', 'Alpha')]))}
+        useRemoteRoots={hook(emptyRemoteRoots)} openRemoteConversation={vi.fn()}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}
       />,
@@ -226,6 +294,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open anchorRef={anchor()} useSessions={hook(sessions)} useWorkspaces={hook(state)}
+        useRemoteRoots={hook(emptyRemoteRoots)} openRemoteConversation={vi.fn()}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}
       />,
@@ -234,7 +303,7 @@ describe('WorkspacePicker', () => {
     // would pre-empt the workspaces about to arrive.
     expect(screen.getByRole('status').textContent).toBe('正在加载工作区…')
     expect(screen.queryByTestId('directory-flow')).toBeNull()
-    expect(screen.getByRole('menuitem', { name: '添加工作区…' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '添加本地工作区…' })).toBeTruthy()
   })
 
   it('shows no popover at all when nothing is listed and nothing can be added', () => {
@@ -268,15 +337,15 @@ describe('WorkspacePicker', () => {
   it('hides the add entry while the directory-flow hole is empty', () => {
     mount([workspace('alpha', 'Alpha')], vi.fn(), occupancySource(false))
     expect(screen.getByRole('menuitem', { name: 'Alpha' })).toBeTruthy()
-    expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '添加本地工作区…' })).toBeNull()
   })
 
   it('shows the add entry when a flow package activates after the first paint', () => {
     const b = mount([workspace('alpha', 'Alpha')], vi.fn(), occupancySource(false))
-    expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '添加本地工作区…' })).toBeNull()
     // Registration changes flow through the subscription, no re-render needed.
     act(() => { b.occupancy.flip(true) })
-    expect(screen.getByRole('menuitem', { name: '添加工作区…' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '添加本地工作区…' })).toBeTruthy()
   })
 
   it('keeps Choose again inert while the flow occupant is gone, and snaps back a flow opened over an empty hole', async () => {
@@ -302,6 +371,6 @@ describe('WorkspacePicker', () => {
     act(() => { b.occupancy.flip(false) })
     expect(b.probe.owner!.open).toBe(false)
     expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Alpha' }).disabled).toBe(false)
-    expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '添加本地工作区…' })).toBeNull()
   })
 })

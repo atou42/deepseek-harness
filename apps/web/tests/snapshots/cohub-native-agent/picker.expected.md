@@ -1,0 +1,9 @@
+- menu:
+  - img
+  - searchbox "Search workspaces"
+  - menuitem "Native Space · Cohub":
+    - img
+    - text: Native Space · Cohub
+  - menuitem "Add workspace…":
+    - img
+    - text: Add workspace…

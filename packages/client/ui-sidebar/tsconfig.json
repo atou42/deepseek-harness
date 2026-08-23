@@ -18,10 +18,10 @@
       "path": "../ui-primitives"
     },
     {
-      "path": "../web-react"
+      "path": "../runtime"
     },
     {
-      "path": "../runtime"
+      "path": "../remote-roots"
     },
     {
       "path": "../ui-layout"

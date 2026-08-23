@@ -25,6 +25,15 @@
 
     },
     {
+      "path": "../../identity/cohub-account"
+    },
+    {
+      "path": "../../context/file-reference"
+    },
+    {
+      "path": "../../context/session-reference"
+    },
+    {
       "path": "../../extensions/cordis-host-runner"
     },
     {
@@ -32,6 +41,12 @@
     },
     {
       "path": "../../feedback/message-feedback"
+    },
+    {
+      "path": "../../host/cohub-board"
+    },
+    {
+      "path": "../../host/cohub-spaces"
     },
     {
       "path": "../../host/plugin-inventory"

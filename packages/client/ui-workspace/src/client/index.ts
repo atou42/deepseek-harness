@@ -8,10 +8,14 @@
  * client half (see the contract module doc). Export discipline:
  * packages/client/AGENTS.md.
  */
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {
+  RemoteRootsServiceContract, RemoteRootsSnapshot,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './WorkspaceBrowser.tsx'
@@ -42,7 +46,34 @@ const NS = 'workspace'
  * provides a waitable service. apply therefore depends on each slot
  * declaration through `slots.inject()` instead of assuming order.
  */
-export const inject = ['slots', 'sessions', 'workspaces', 'locale']
+export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'connection']
+
+const EMPTY_REMOTE_ROOTS: RemoteRootsSnapshot = Object.freeze({ revision: 0, sources: Object.freeze([]) })
+
+/** Optional remote-root source: local-only compositions keep the picker fully functional. */
+function optionalRemoteRoots(ctx: ClientContext): HostObservable<RemoteRootsSnapshot> {
+  let source: HostObservable<RemoteRootsSnapshot> | undefined
+  let unsubscribe: (() => void) | undefined
+  const listeners = new Set<() => void>()
+  ctx.inject(['remoteRoots'], (scope: ClientContext) => {
+    source = scope.remoteRoots.snapshot
+    unsubscribe = source.subscribe(() => { for (const listener of [...listeners]) listener() })
+    for (const listener of [...listeners]) listener()
+    return () => {
+      unsubscribe?.()
+      unsubscribe = undefined
+      source = undefined
+      for (const listener of [...listeners]) listener()
+    }
+  })
+  return {
+    getSnapshot: () => source?.getSnapshot() ?? EMPTY_REMOTE_ROOTS,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
+}
 
 /**
  * Register the browser and picker once their slot declarations are on the
@@ -51,13 +82,9 @@ export const inject = ['slots', 'sessions', 'workspaces', 'locale']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const connection = ctx.get('connection') as ConnectionHandle
+  const hostDescription = connection.hostDescription
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
-
-  const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
-    const result = await ctx.sessions.search(query, signal)
-    if (!result.ok) throw new Error(result.error.message)
-    return result.value
-  }
 
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
   // source identity): true while the surface's directory-flow hole is filled.
@@ -67,13 +94,24 @@ export function apply(ctx: ClientContext): void {
   })
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
+  const remoteRootsSource = optionalRemoteRoots(ctx)
+  const openRemoteConversation = async (sourceId: Parameters<RemoteRootsServiceContract['openConversation']>[0], rootId: Parameters<RemoteRootsServiceContract['openConversation']>[1]): Promise<void> => {
+    const service = ctx.get('remoteRoots')
+    if (service === undefined) throw new Error('ui-workspace: remote roots are unavailable')
+    await service.openConversation(sourceId, rootId)
+  }
+  const deactivateRemoteConversation = (): void => { ctx.get('remoteRoots')?.deactivate() }
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
-    startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
-    open: (sessionId) => { ctx.sessions.open(sessionId) },
-    searchSessions,
-    searchResultLimit: ctx.sessions.searchResultLimit,
+    startSession: (workspaceId) => {
+      deactivateRemoteConversation()
+      ctx.workspaces.startSession(workspaceId)
+    },
+    open: (sessionId) => {
+      deactivateRemoteConversation()
+      ctx.sessions.open(sessionId)
+    },
     renameSession: async (sessionId, title) => {
       // Row → session-face hop: rename is a per-session verb (ISession), not
       // a list-service verb; the binding resolves any listed session.
@@ -84,7 +122,10 @@ export function apply(ctx: ClientContext): void {
     },
     forkSession: (sessionId) => {
       ctx.sessions.fork({ sessionId, increaseTitle: true })
-        .then((childId) => { ctx.sessions.open(childId) })
+        .then((childId) => {
+          deactivateRemoteConversation()
+          ctx.sessions.open(childId)
+        })
         .catch(() => {
           // Fork or child-rename failure keeps the current selection.
         })
@@ -99,18 +140,25 @@ export function apply(ctx: ClientContext): void {
       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     },
     createWorkspace: input => ctx.workspaces.create(input),
-    hooks: { directoryFlow: browserFlowSource },
+    openRemoteConversation,
+    hooks: { directoryFlow: browserFlowSource, remoteRoots: remoteRootsSource, hostDescription },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => ctx.workspaces.create(input),
-    hooks: { directoryFlow: pickerFlowSource },
+    openRemoteConversation,
+    hooks: { directoryFlow: pickerFlowSource, remoteRoots: remoteRootsSource },
   })
   // Each registration declares its directory-flow child in the same call;
   // slot injection follows both the owner and declaration HMR lifetimes.
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
     {
       name: 'sidebar.workspaces',
-      children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
+      children: {
+        'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+        // Generic presentation seam. Occupants remain outside Workspace,
+        // cwd, local filesystem, and Shell semantics.
+        'sidebar.workspaces.remoteRoots': { kind: 'single', scope: 'root' },
+      },
       store: createWorkspaceViewStore(),
       inject: browserInjected,
       locale: NS,

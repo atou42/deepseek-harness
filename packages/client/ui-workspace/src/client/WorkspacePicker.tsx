@@ -5,22 +5,30 @@
  * registration. Directory picking itself lives in the composed flow package's
  * slot occupant (see the contract module doc): this core only opens the flow,
  * adopts the picked path, and owns the error surface. Adding a workspace has
- * exactly one route — pick a host directory, new or existing — because the
- * occupant's own create-folder affordance already covers creating one.
+ * exactly one local route — pick a host directory, new or existing — while
+ * interactive remote roots remain provider-owned selections.
  */
 import type { ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Button, IconFolderClose16, IconPlusOutline16, Menu, Modal, type MenuEntry,
+  Button, IconFolderClose16, IconPlusOutline16, IconSearchOutline16, Input, Menu, Modal, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   WorkspaceId, WorkspaceListState, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/slots.ts'
 import css from './WorkspacePicker.module.css'
 
 const ADD_WORKSPACE = '::add-workspace'
+const NO_SEARCH_RESULTS = '::no-search-results'
+
+function searchText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase()
+}
 
 /** Core flow props: the owner supplies popover control and pick semantics. */
 export interface WorkspacePickFlowProps {
@@ -32,6 +40,10 @@ export interface WorkspacePickFlowProps {
   anchorRef?: RefObject<HTMLElement | null> | undefined
   /** Selector hook over the workspace list (framework standard hook). */
   useWorkspaces: <S>(selector: (state: WorkspaceListState) => S) => S
+  /** Selector hook over provider-owned remote Spaces. */
+  useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
+  /** Open a provider-owned cloud Session in the selected Space. */
+  openRemoteConversation: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
   /** Bound occupancy selector hook for this surface's directory-flow hole (empty leaves the surface with no add action). */
@@ -42,7 +54,7 @@ export interface WorkspacePickFlowProps {
   onPick: (workspaceId: WorkspaceId) => void
   /** Close the popover (outside click / Escape / post-pick). */
   onClose: () => void
-  /** Only offer the add action, hide existing workspaces. */
+  /** Hide existing local Workspaces while retaining remote roots and the local add action. */
   addOnly?: boolean
   /** Menu opening direction relative to the anchor. */
   side?: 'bottom' | 'top' | 'right'
@@ -60,6 +72,8 @@ export function WorkspacePickFlow({
   open,
   anchorRef,
   useWorkspaces,
+  useRemoteRoots,
+  openRemoteConversation,
   createWorkspace,
   useDirectoryFlow,
   renderDirectoryFlow,
@@ -70,7 +84,17 @@ export function WorkspacePickFlow({
   selectedId,
 }: WorkspacePickFlowProps) {
   const workspaceSnapshot = useWorkspaces(state => state)
+  const remoteSnapshot = useRemoteRoots(state => state)
   const workspaces = workspaceSnapshot.items
+  const remoteEntries = remoteSnapshot.sources.flatMap(source => source.status === 'ready'
+    ? source.roots.flatMap(root => root.capabilities.conversation === 'interactive' ? [{
+      id: JSON.stringify(['remote', 'conversation', source.sourceId, root.id]),
+      sourceId: source.sourceId,
+      rootId: root.id,
+      label: `${root.title} · ${root.marker.label}`,
+    }] : [])
+    : [])
+  const remoteByMenuId = new Map(remoteEntries.map(entry => [entry.id, entry]))
   const getAnchorRect = useCallback(
     () => anchorRef?.current?.getBoundingClientRect() ?? null,
     [anchorRef],
@@ -79,11 +103,13 @@ export function WorkspacePickFlow({
   const [modalError, setModalError] = useState<string | null>(null)
   const [flowOpen, setFlowOpen] = useState(false)
   const [pickingFolder, setPickingFolder] = useState(false)
+  const [activatingRemote, setActivatingRemote] = useState(false)
+  const [query, setQuery] = useState('')
   // One picking interaction at a time: while the flow is open (native chooser
   // pending, browse dialog up) or its pick is being adopted, every other
   // menu action stays disabled — a late outcome must not race a concurrent
   // selection or adoption.
-  const flowBusy = flowOpen || pickingFolder
+  const flowBusy = flowOpen || pickingFolder || activatingRemote
 
   // The occupied hole gates the picking affordance: with no composed flow the
   // entry simply is not there (the seam's documented no-flow default). The
@@ -103,19 +129,44 @@ export function WorkspacePickFlow({
     : []
   // With workspaces listed, the add action pins below the scroll region
   // (divider + always visible); otherwise it IS the menu.
-  const pinAdd = !addOnly && workspaces.length > 0
+  const listedWorkspaces = addOnly ? [] : workspaces
+  const pinAdd = listedWorkspaces.length > 0 || remoteEntries.length > 0
+  const normalizedQuery = searchText(query.trim())
+  const workspaceEntries = listedWorkspaces.map(workspace => ({
+    id: workspace.workspaceId,
+    label: workspace.title,
+    searchText: searchText(workspace.title),
+  }))
+  const filteredWorkspaces = normalizedQuery.length === 0
+    ? workspaceEntries
+    : workspaceEntries.filter(entry => entry.searchText.includes(normalizedQuery))
+  const filteredRemotes = normalizedQuery.length === 0
+    ? remoteEntries
+    : remoteEntries.filter(entry => searchText(entry.label).includes(normalizedQuery))
+  const filteredEntries: MenuEntry[] = [...filteredWorkspaces.map(workspace => ({
+    id: workspace.id,
+    label: workspace.label,
+    icon: <IconFolderClose16 size={16} />,
+    disabled: flowBusy,
+  })), ...filteredRemotes.map(entry => ({
+    id: entry.id,
+    label: entry.label,
+    icon: <IconFolderClose16 size={16} />,
+    disabled: flowBusy,
+  }))]
   const items: MenuEntry[] = pinAdd
-    ? workspaces.map(workspace => ({
-      id: workspace.workspaceId,
-      label: workspace.title,
-      icon: <IconFolderClose16 size={16} />,
-      disabled: flowBusy,
-    }))
+    ? filteredEntries.length > 0 || normalizedQuery.length === 0
+      ? filteredEntries
+      : [{ type: 'label', id: NO_SEARCH_RESULTS, text: t('picker.search.empty') }]
     : addEntries
   // Nothing listed and nothing to add with (a composition that mounts this
   // package without any directory-picker): an empty popover would claim a
   // choice that does not exist, so the anchor gesture shows nothing at all.
   const menuIsEmpty = items.length === 0
+
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
 
   const closeModal = (): void => {
     setErrorOpen(false)
@@ -147,8 +198,10 @@ export function WorkspacePickFlow({
   // would consume it (close the popover, raise the flow). An empty list is
   // only final once the baseline lands — until then the menu stays up with its
   // loading status instead of jumping into a flow the arriving list would have
-  // made unnecessary; the add-only surface lists nothing and never waits.
-  const listSettled = addOnly || workspaceSnapshot.phase === 'ready'
+  // made unnecessary. The add-only surface omits existing local Workspaces,
+  // but waits for remote roots before deciding whether local add is the only target.
+  const remoteSettled = remoteSnapshot.sources.every(source => source.status !== 'loading')
+  const listSettled = (addOnly || workspaceSnapshot.phase === 'ready') && remoteSettled
   const addIsTheOnlyEntry = !pinAdd && listSettled && addEntries.length === 1
   // `flowBusy` gates this exactly as it disables the equivalent menu entry: a
   // pick still being adopted owns the surface until it settles.
@@ -177,8 +230,23 @@ export function WorkspacePickFlow({
       openDirectoryFlow()
       return
     }
+    const remote = remoteByMenuId.get(id)
+    if (remote !== undefined) {
+      setActivatingRemote(true)
+      void openRemoteConversation(remote.sourceId, remote.rootId).then(() => {
+        onClose()
+      }, (reason: unknown) => {
+        setModalError(reason instanceof Error ? reason.message : String(reason))
+        setErrorOpen(true)
+      }).finally(() => { setActivatingRemote(false) })
+      return
+    }
     onPick(id as WorkspaceId)
   }
+
+  const selectedRemoteId = remoteSnapshot.active === undefined
+    ? undefined
+    : JSON.stringify(['remote', 'conversation', remoteSnapshot.active.sourceId, remoteSnapshot.active.rootId])
 
   return (
     <>
@@ -186,15 +254,28 @@ export function WorkspacePickFlow({
         open={open && !addIsTheOnlyEntry && !menuIsEmpty}
         anchor={null}
         items={items}
+        {...pinAdd ? {
+          header: (
+            <Input
+              className={css.pickerSearch ?? ''}
+              type="search"
+              value={query}
+              icon={<IconSearchOutline16 size={16} />}
+              aria-label={t('picker.search.aria')}
+              placeholder={t('picker.search.placeholder')}
+              onChange={(event) => { setQuery(event.currentTarget.value) }}
+            />
+          ),
+        } : {}}
         {...pinAdd ? { footer: addEntries } : {}}
-        selectedId={selectedId}
+        selectedId={selectedRemoteId ?? selectedId}
         onSelect={handleSelect}
         onClose={onClose}
         side={side}
         portal
         getAnchorRect={getAnchorRect}
       />
-      {open && !addIsTheOnlyEntry && !menuIsEmpty && workspaceSnapshot.phase === 'pending' && <div className={css.menuStatus} role="status">{t('picker.loading')}</div>}
+      {open && !addIsTheOnlyEntry && !menuIsEmpty && !listSettled && <div className={css.menuStatus} role="status">{t('picker.loading')}</div>}
       {renderDirectoryFlow(flowOwner)}
       <Modal
         open={errorOpen}
@@ -226,6 +307,8 @@ export function WorkspacePicker({
   open,
   anchorRef,
   useWorkspaces,
+  useRemoteRoots,
+  openRemoteConversation,
   selectedId,
   onPick,
   onClose,
@@ -240,6 +323,8 @@ export function WorkspacePicker({
       open={open}
       anchorRef={anchorRef}
       useWorkspaces={useWorkspaces}
+      useRemoteRoots={useRemoteRoots}
+      openRemoteConversation={openRemoteConversation}
       createWorkspace={createWorkspace}
       useDirectoryFlow={useDirectoryFlow}
       renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}

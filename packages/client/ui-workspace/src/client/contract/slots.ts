@@ -16,20 +16,24 @@
  * semantics (`createWorkspace({ path })`, the retryable error dialog,
  * Choose again); the occupant owns everything between `open` and the picked path,
  * including creating a new directory to hand back. That occupant-owned
- * creation is why adding a workspace has a single route: an unoccupied hole
- * leaves the surface with no add affordance at all.
+ * creation is why adding a local Workspace has a single route. Provider-owned
+ * remote roots remain selectable without acquiring local path semantics.
  * Two holes exist because the two menu surfaces are independent slot entries
  * and a hole has exactly one declaring entry — they carry the same owner
  * contract and the same occupant.
  */
-import type { HostObservable, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
+import type { HostObservable, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the owner SlotMap merges into programs that resolve the
 // runtime shares below.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  SessionId, SessionSearchResultItem, WorkspaceId, WorkspaceView,
+  SessionId, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  RemoteResourceId, RemoteRootsSnapshot, RemoteRootSourceId,
+} from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { createWorkspaceViewStore } from '../stores.ts'
 
 /**
@@ -56,6 +60,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
     /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
+    /** Provider-neutral remote roots shown beside, filtered by the owner's Workspace query. */
+    'sidebar.workspaces.remoteRoots': {
+      kind: 'single'
+      scope: 'root'
+      owner: { readonly query: string }
+    }
   }
 }
 
@@ -72,24 +82,29 @@ export type DirectoryFlowSlotName =
  * flow whose occupant unloaded mid-interaction (nobody is left to cancel).
  */
 export type DirectoryPickingInjected = {
+  /** Open a provider-owned cloud Session without starting a local DSH Agent. */
+  openRemoteConversation: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   hooks: {
     /** True while this surface's directory-flow hole is occupied. */
     directoryFlow: HostObservable<boolean>
+    /** Provider-neutral cloud roots available to workspace selectors. */
+    remoteRoots: HostObservable<RemoteRootsSnapshot>
   }
 }
 
 /** Component-side view of the picking share: the bound occupancy selector hook. */
-export type DirectoryPickingHooks = {
-  /** Selector hook over this surface's directory-flow occupancy. */
-  useDirectoryFlow: SnapshotSelectorHook<boolean>
-}
+export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']>
 
 /**
  * Browser-private injected share (arrives via the register inject factory).
  * Data reads use the global framework hooks; these are the Host actions the
  * browsing region drives.
  */
-export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
+export type WorkspaceBrowserInjected = {
+  hooks: DirectoryPickingInjected['hooks'] & {
+    /** Current generation's Host description, bound by the slot renderer. */
+    hostDescription: HostDescriptionSource
+  }
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and
    * open it; without an explicit workspace, inherit the current Session
@@ -98,16 +113,6 @@ export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
   startSession: (workspaceId?: WorkspaceId) => void
   /** Open a real Session. */
   open: (sessionId: SessionId) => void
-  /**
-   * Search current visible conversation messages. The Host fixes the result
-   * bound; `hasMore` means the query needs narrowing.
-   */
-  searchSessions: (
-    query: string,
-    signal: AbortSignal,
-  ) => Promise<{ items: readonly SessionSearchResultItem[]; hasMore: boolean }>
-  /** Maximum number of merged rows rendered for one search. */
-  searchResultLimit: number
   /** Rename a Session (explicit user title; resolves on host acceptance). */
   renameSession: (sessionId: SessionId, title: string) => Promise<void>
   /** Fork a Session at its last completed turn and open the child. */
@@ -135,15 +140,17 @@ export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
   insertSessionBefore: (workspaceId: WorkspaceId, sessionId: SessionId, beforeSessionId?: SessionId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  /** Open a provider-owned cloud Session without starting a local DSH Agent. */
+  openRemoteConversation: DirectoryPickingInjected['openRemoteConversation']
 }
 
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
 export type WorkspaceBrowserProps =
   PropsRuntime<'sidebar.workspaces'>
-  & PropsRenderSlots<'sidebar.workspaces.directoryFlow'>
+  & PropsRenderSlots<'sidebar.workspaces.directoryFlow' | 'sidebar.workspaces.remoteRoots'>
   & PropsStore<ReturnType<typeof createWorkspaceViewStore>>
   & Omit<WorkspaceBrowserInjected, 'hooks'>
-  & DirectoryPickingHooks
+  & PropsHooks<WorkspaceBrowserInjected['hooks']>
   & PropsLocale<'workspace'>
 
 /**

@@ -77,6 +77,14 @@
   overflow-y: auto;
 }
 
+/* Optional controls such as picker search stay visible while rows scroll. */
+.header {
+  flex: none;
+  margin-bottom: 4px;
+  padding: 4px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
 /* Pinned rows below the scroll region; l2 hairline (l1 is near-invisible on
  * the menu surface) mirrors the .separator spacing. */
 .footer {
