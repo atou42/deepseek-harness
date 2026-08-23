@@ -82,8 +82,6 @@ export type DirectoryFlowSlotName =
  * flow whose occupant unloaded mid-interaction (nobody is left to cancel).
  */
 export type DirectoryPickingInjected = {
-  /** Start a local DSH Session with a provider-owned remote Space attached. */
-  startRemoteWorkspace: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   /** Open a provider-owned cloud Session without starting a local DSH Agent. */
   openRemoteConversation: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   hooks: {
@@ -152,8 +150,6 @@ export type WorkspaceBrowserInjected = {
   insertSessionBefore: (workspaceId: WorkspaceId, sessionId: SessionId, beforeSessionId?: SessionId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace before targeting a Session. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
-  /** Start a local DSH Session with a provider-owned remote Space attached. */
-  startRemoteWorkspace: DirectoryPickingInjected['startRemoteWorkspace']
   /** Open a provider-owned cloud Session without starting a local DSH Agent. */
   openRemoteConversation: DirectoryPickingInjected['openRemoteConversation']
 }

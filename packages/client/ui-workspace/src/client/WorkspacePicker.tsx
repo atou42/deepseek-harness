@@ -42,8 +42,6 @@ export interface WorkspacePickFlowProps {
   useWorkspaces: <S>(selector: (state: WorkspaceListState) => S) => S
   /** Selector hook over provider-owned remote Spaces. */
   useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
-  /** Start a local DSH Session with the selected provider-owned Space attached. */
-  startRemoteWorkspace: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   /** Open a provider-owned cloud Session in the selected Space. */
   openRemoteConversation: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace. */
@@ -75,7 +73,6 @@ export function WorkspacePickFlow({
   anchorRef,
   useWorkspaces,
   useRemoteRoots,
-  startRemoteWorkspace,
   openRemoteConversation,
   createWorkspace,
   useDirectoryFlow,
@@ -90,22 +87,12 @@ export function WorkspacePickFlow({
   const remoteSnapshot = useRemoteRoots(state => state)
   const workspaces = workspaceSnapshot.items
   const remoteEntries = addOnly ? [] : remoteSnapshot.sources.flatMap(source => source.status === 'ready'
-    ? source.roots.flatMap(root => [
-      ...root.capabilities.conversation === 'interactive' ? [{
-        id: JSON.stringify(['remote', 'conversation', source.sourceId, root.id]),
-        sourceId: source.sourceId,
-        rootId: root.id,
-        mode: 'conversation' as const,
-        label: `${root.title} · ${t('picker.mode.cohub')} · ${t('picker.location.cloud')}`,
-      }] : [],
-      ...root.capabilities.workspace === true ? [{
-        id: JSON.stringify(['remote', 'workspace', source.sourceId, root.id]),
-        sourceId: source.sourceId,
-        rootId: root.id,
-        mode: 'workspace' as const,
-        label: `${root.title} · ${t('picker.mode.dsh')} · ${t('picker.location.local')}`,
-      }] : [],
-    ])
+    ? source.roots.flatMap(root => root.capabilities.conversation === 'interactive' ? [{
+      id: JSON.stringify(['remote', 'conversation', source.sourceId, root.id]),
+      sourceId: source.sourceId,
+      rootId: root.id,
+      label: `${root.title} · ${root.marker.label}`,
+    }] : [])
     : [])
   const remoteByMenuId = new Map(remoteEntries.map(entry => [entry.id, entry]))
   const getAnchorRect = useCallback(
@@ -244,8 +231,7 @@ export function WorkspacePickFlow({
     const remote = remoteByMenuId.get(id)
     if (remote !== undefined) {
       setActivatingRemote(true)
-      const operation = remote.mode === 'conversation' ? openRemoteConversation : startRemoteWorkspace
-      void operation(remote.sourceId, remote.rootId).then(() => {
+      void openRemoteConversation(remote.sourceId, remote.rootId).then(() => {
         onClose()
       }, (reason: unknown) => {
         setModalError(reason instanceof Error ? reason.message : String(reason))
@@ -320,7 +306,6 @@ export function WorkspacePicker({
   anchorRef,
   useWorkspaces,
   useRemoteRoots,
-  startRemoteWorkspace,
   openRemoteConversation,
   selectedId,
   onPick,
@@ -337,7 +322,6 @@ export function WorkspacePicker({
       anchorRef={anchorRef}
       useWorkspaces={useWorkspaces}
       useRemoteRoots={useRemoteRoots}
-      startRemoteWorkspace={startRemoteWorkspace}
       openRemoteConversation={openRemoteConversation}
       createWorkspace={createWorkspace}
       useDirectoryFlow={useDirectoryFlow}

@@ -759,7 +759,6 @@ export function WorkspaceBrowser({
   archiveSession,
   insertSessionBefore,
   createWorkspace,
-  startRemoteWorkspace,
   openRemoteConversation,
   searchSessions,
   searchResultLimit,
@@ -1111,7 +1110,6 @@ export function WorkspaceBrowser({
           anchorRef={wsPlusRef}
           useWorkspaces={useWorkspaces}
           useRemoteRoots={useRemoteRoots}
-          startRemoteWorkspace={startRemoteWorkspace}
           openRemoteConversation={openRemoteConversation}
           createWorkspace={createWorkspace}
           useDirectoryFlow={useDirectoryFlow}

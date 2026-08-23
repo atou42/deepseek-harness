@@ -101,11 +101,6 @@ export function apply(ctx: ClientContext): void {
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const remoteRootsSource = optionalRemoteRoots(ctx)
-  const startRemoteWorkspace = async (sourceId: Parameters<RemoteRootsServiceContract['startWorkspace']>[0], rootId: Parameters<RemoteRootsServiceContract['startWorkspace']>[1]): Promise<void> => {
-    const service = ctx.get('remoteRoots')
-    if (service === undefined) throw new Error('ui-workspace: remote roots are unavailable')
-    await service.startWorkspace(sourceId, rootId)
-  }
   const openRemoteConversation = async (sourceId: Parameters<RemoteRootsServiceContract['openConversation']>[0], rootId: Parameters<RemoteRootsServiceContract['openConversation']>[1]): Promise<void> => {
     const service = ctx.get('remoteRoots')
     if (service === undefined) throw new Error('ui-workspace: remote roots are unavailable')
@@ -143,13 +138,11 @@ export function apply(ctx: ClientContext): void {
       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     },
     createWorkspace: input => ctx.workspaces.create(input),
-    startRemoteWorkspace,
     openRemoteConversation,
     hooks: { directoryFlow: browserFlowSource, remoteRoots: remoteRootsSource, hostDescription },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => ctx.workspaces.create(input),
-    startRemoteWorkspace,
     openRemoteConversation,
     hooks: { directoryFlow: pickerFlowSource, remoteRoots: remoteRootsSource },
   })

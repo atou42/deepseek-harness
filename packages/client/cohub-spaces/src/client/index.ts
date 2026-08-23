@@ -13,6 +13,9 @@ import type {
   RemoteRootSourceId,
   RemoteRootSourceSnapshot,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
+import type {
+  InputTriggerServiceContract, InputTriggerSource,
+} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-remote-roots/client'
 
@@ -52,6 +55,92 @@ function unwrapRemote<T>(operation: string, answer: RemoteAnswer<T>): T {
 
 function resourceId(spaceId: string, path: string): RemoteResourceId {
   return JSON.stringify([spaceId, path]) as RemoteResourceId
+}
+
+interface CohubSpaceReference {
+  readonly version: 1
+  readonly spaceId: string
+  readonly title: string
+}
+
+function parseSpaceReference(value: string | undefined): CohubSpaceReference {
+  let parsed: unknown
+  try { parsed = JSON.parse(value ?? '') } catch (error) {
+    throw new TypeError('client-cohub-spaces: Cohub Space reference is malformed', { cause: error })
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new TypeError('client-cohub-spaces: Cohub Space reference is malformed')
+  }
+  const record = parsed as Record<string, unknown>
+  if (record.version !== 1 || typeof record.spaceId !== 'string' || record.spaceId.trim().length === 0
+    || typeof record.title !== 'string' || record.title.trim().length === 0) {
+    throw new TypeError('client-cohub-spaces: Cohub Space reference is malformed')
+  }
+  return Object.freeze({ version: 1, spaceId: record.spaceId, title: record.title })
+}
+
+function referenceValue(spaceId: string, title: string): string {
+  return JSON.stringify({ version: 1, spaceId, title } satisfies CohubSpaceReference)
+}
+
+function mention(reference: CohubSpaceReference): string {
+  const label = reference.title.replaceAll('\\', '\\\\').replaceAll(']', '\\]')
+  return `@[${label}](cohub-space:${encodeURIComponent(reference.spaceId)})`
+}
+
+function normalized(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase()
+}
+
+/** Build the local-composer @ source over the provider's current cloud roots. */
+export function createCohubSpaceReferenceSource(
+  snapshot: ObservableSnapshot<RemoteRootSourceSnapshot>,
+): InputTriggerSource {
+  return {
+    trigger: '@',
+    name: 'cohub-space',
+    order: 20,
+    showGroupTitle: false,
+    candidates(_session, request) {
+      if (request.signal.aborted) return Promise.resolve([])
+      const current = snapshot.getSnapshot()
+      if (current.status !== 'ready') return Promise.resolve([])
+      const query = normalized(request.query.trim())
+      return Promise.resolve(current.roots
+        .filter(root => query.length === 0 || normalized(root.title).includes(query))
+        .map(root => ({
+          name: root.title,
+          description: 'Cohub 云端资产',
+          section: 'Cohub Spaces',
+          value: referenceValue(root.id, root.title),
+        })))
+    },
+    onPick({ candidate }) {
+      const reference = parseSpaceReference(candidate.value)
+      const ref = referenceValue(reference.spaceId, reference.title)
+      return {
+        insert: {
+          source: 'cohub-space',
+          ref,
+          label: reference.title,
+          appearance: 'folder',
+          clipboardText: mention(reference),
+        },
+      }
+    },
+    codec: {
+      clipboardText: ref => mention(parseSpaceReference(ref)),
+      serialize: (ref, signal) => {
+        if (signal.aborted) {
+          return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('Cohub Space reference serialization aborted'))
+        }
+        const reference = parseSpaceReference(ref)
+        return Promise.resolve(
+          `Cohub Space reference: title=${JSON.stringify(reference.title)}, space_id=${JSON.stringify(reference.spaceId)}. Use the cohub_space_* tools with this exact space_id to access its cloud assets. Do not treat it as a local path.`,
+        )
+      },
+    },
+  }
 }
 
 function sessionId(rootId: RemoteResourceId, value: RemoteResourceId): string {
@@ -124,10 +213,7 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     },
   }
 
-  constructor(
-    private readonly remote: CohubSpacesRemoteApi,
-    private readonly startDshSession: (spaceId: string) => Promise<void>,
-  ) {}
+  constructor(private readonly remote: CohubSpacesRemoteApi) {}
 
   /** Reload account state and the accessible Space roots. */
   async refresh(): Promise<void> {
@@ -160,7 +246,7 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
           title: space.title,
           marker: Object.freeze({ kind: 'cloud' as const, label: 'Cohub' }),
           capabilities: Object.freeze({
-            browse: true as const, read: false, write: false, workspace: true, conversation: 'interactive' as const,
+            browse: true as const, read: false, write: false, workspace: false, conversation: 'interactive' as const,
           }),
         })
       })
@@ -222,13 +308,6 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
         updatedAt: turn.updatedAt,
       }))),
     })
-  }
-
-  async startWorkspace(request: {
-    readonly rootId: RemoteResourceId
-    readonly signal?: AbortSignal
-  }): Promise<void> {
-    await abortable(this.startDshSession(request.rootId), request.signal)
   }
 
   async sendConversationMessage(request: {
@@ -306,10 +385,11 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
 declare module '@deepseek-ai/cordis' {
   interface Context {
     remoteRoots: import('@deepseek-ai/dsh-client-remote-roots/client').RemoteRootsServiceContract
+    inputTriggers: import('@deepseek-ai/dsh-client-ui-input-trigger/client').InputTriggerServiceContract
   }
 }
 
-export const inject = ['remote', 'remote.cohubAccount', 'remote.cohubSpaces', 'remoteRoots', 'sessions', 'workspaces']
+export const inject = ['remote', 'remote.cohubAccount', 'remote.cohubSpaces', 'remoteRoots', 'inputTriggers']
 
 /** Register the Cohub source and refresh it whenever the Host account changes. */
 export function apply(ctx: ClientContext): () => void {
@@ -334,21 +414,15 @@ export function apply(ctx: ClientContext): () => void {
       unwrapRemote('cohubSpaces.sendPrompt', await carrier.sendPrompt(spaceId, sessionId, content, clientMessageId)),
     abortTurn: async (spaceId, sessionId, turnId) =>
       unwrapRemote('cohubSpaces.abortTurn', await carrier.abortTurn(spaceId, sessionId, turnId)),
-  }, async (spaceId) => {
-    const start = unwrapRemote('cohubSpaces.getDshSessionStart', await carrier.getDshSessionStart(spaceId))
-    if (start.spaceId !== spaceId || typeof start.cwd !== 'string' || start.cwd.trim().length === 0) {
-      throw new TypeError('client-cohub-spaces: DSH Session start context does not match the requested Space')
-    }
-    const workspace = await ctx.workspaces.create({ path: start.cwd })
-    const sessionId = await ctx.sessions.create({ workspaceId: workspace.workspaceId })
-    unwrapRemote('cohubSpaces.bindDshSession', await carrier.bindDshSession(spaceId, sessionId))
-    ctx.sessions.open(sessionId)
   })
   const unregister = ctx.remoteRoots.register(source)
+  const inputTriggers: InputTriggerServiceContract = ctx.inputTriggers
+  const unregisterReference = inputTriggers.registerSource(createCohubSpaceReferenceSource(source.snapshot))
   let off: (() => void) | undefined
   try {
     off = ctx.remote.$on('cohub-spaces/changed', () => { void source.refresh() })
   } catch (error) {
+    unregisterReference()
     unregister()
     source.dispose()
     throw error
@@ -356,6 +430,7 @@ export function apply(ctx: ClientContext): () => void {
   void source.refresh()
   return () => {
     off()
+    unregisterReference()
     unregister()
     source.dispose()
   }

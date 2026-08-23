@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-08-23-cohub-native-agent-sessions.zh.md)
 
+The two-row local/cloud presentation in this note is superseded by [Cohub cloud selection and local @Space references](2026-08-23-cohub-space-at-references.md). Native Cohub Session ownership remains unchanged.
+
 ## Problem
 
 DSH already lets a local Agent bind a Cohub Space as remote context. That is useful, but it is not the same product as running Cohub Agent inside the Space: the Agent, prompt, Turn lifecycle, and Session persistence remain local. Presenting one unlabeled Space choice for both meanings made execution ownership impossible to understand and prevented users from continuing the same cloud Session from Cohub.

@@ -45,7 +45,7 @@ describe('RemoteRootTree', () => {
     const view = render(
       <RemoteRootTree
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
-        openConversation={openConversation} startWorkspace={vi.fn()} t={t}
+        openConversation={openConversation} t={t}
       />,
     )
     fireEvent.click(view.getByRole('treeitem', { name: '展开 故事空间' }))
@@ -55,27 +55,23 @@ describe('RemoteRootTree', () => {
     )
   })
 
-  it('offers explicit Cohub Agent and local DSH Agent modes for one Space', async () => {
+  it('offers only the cloud Cohub Agent action for one Space', async () => {
     const source = createSnapshotStore(readySnapshot())
     const openConversation = vi.fn(async () => {})
-    const startWorkspace = vi.fn(async () => {})
     const list = vi.fn(async (_sourceId: RemoteRootSourceId, request: Parameters<RemoteRootTreeProps['list']>[1]) => ({
       rootId: request.rootId, parentId: request.parentId, entries: [],
     }))
     const view = render(
       <RemoteRootTree
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
-        openConversation={openConversation} startWorkspace={startWorkspace} t={t}
+        openConversation={openConversation} t={t}
       />,
     )
 
     fireEvent.click(view.getByRole('treeitem', { name: '展开 故事空间' }))
     fireEvent.click(await view.findByRole('button', { name: '在故事空间中使用 Cohub Agent' }))
     expect(openConversation).toHaveBeenCalledWith(sid('fixture.remote'), rid('space:opaque-1'))
-    const localButton = view.getByRole('button', { name: '在故事空间中使用本地 DSH Agent' })
-    await waitFor(() => { expect((localButton as HTMLButtonElement).disabled).toBe(false) })
-    fireEvent.click(localButton)
-    expect(startWorkspace).toHaveBeenCalledWith(sid('fixture.remote'), rid('space:opaque-1'))
+    expect(view.queryByRole('button', { name: '在故事空间中使用本地 DSH Agent' })).toBeNull()
   })
 
   it('renders a marked folder-like remote root and lists through opaque identities', async () => {
@@ -92,7 +88,7 @@ describe('RemoteRootTree', () => {
     const view = render(
       <RemoteRootTree
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
-        openConversation={vi.fn()} startWorkspace={vi.fn()} t={t}
+        openConversation={vi.fn()} t={t}
       />,
     )
     expect(view.getByText('故事空间').closest('[role="treeitem"]')?.getAttribute('aria-expanded')).toBe('false')
@@ -125,7 +121,7 @@ describe('RemoteRootTree', () => {
     const view = render(
       <RemoteRootTree
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
-        openConversation={vi.fn()} startWorkspace={vi.fn()} t={t}
+        openConversation={vi.fn()} t={t}
       />,
     )
     fireEvent.click(view.getByRole('treeitem', { name: '展开 故事空间' }))
@@ -154,7 +150,7 @@ describe('RemoteRootTree', () => {
     const view = render(
       <RemoteRootTree
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
-        openConversation={vi.fn()} startWorkspace={vi.fn()} t={t}
+        openConversation={vi.fn()} t={t}
       />,
     )
     fireEvent.click(view.getByRole('treeitem', { name: '展开 故事空间' }))
@@ -174,7 +170,7 @@ describe('RemoteRootTree', () => {
     const view = render(
       <RemoteRootTree
         useRemoteRoots={bindSnapshotSelector(source)} list={vi.fn()}
-        openConversation={vi.fn()} startWorkspace={vi.fn()} t={t}
+        openConversation={vi.fn()} t={t}
       />,
     )
     expect(view.getByRole('status').textContent).toContain('正在连接')

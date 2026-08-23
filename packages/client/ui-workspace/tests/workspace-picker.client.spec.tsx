@@ -89,7 +89,6 @@ function mount(
 ) {
   const onPick = vi.fn()
   const onClose = vi.fn()
-  const startRemoteWorkspace = vi.fn(async () => {})
   const openRemoteConversation = vi.fn(async () => {})
   const anchorRef = anchor()
   const { probe, renderSlot } = flowProbe()
@@ -100,7 +99,6 @@ function mount(
       useSessions={hook(sessions)}
       useWorkspaces={hook(workspaceState(nextItems))}
       useRemoteRoots={hook(remoteRoots)}
-      startRemoteWorkspace={startRemoteWorkspace}
       openRemoteConversation={openRemoteConversation}
       onPick={onPick}
       onClose={onClose}
@@ -114,7 +112,7 @@ function mount(
     renderPicker(items),
   )
   return {
-    view, onPick, onClose, startRemoteWorkspace, openRemoteConversation, createWorkspace, probe, occupancy,
+    view, onPick, onClose, openRemoteConversation, createWorkspace, probe, occupancy,
     rerenderItems: (nextItems: readonly WorkspaceView[]) => { view.rerender(renderPicker(nextItems)) },
   }
 }
@@ -151,13 +149,13 @@ describe('WorkspacePicker', () => {
     const search = screen.getByRole('searchbox', { name: '搜索工作区' })
     fireEvent.change(search, { target: { value: 'research' } })
 
-    expect(screen.getByRole('menuitem', { name: 'Studio Research Swarm · Cohub Agent · 云端' })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: 'Studio Research Swarm · DSH Agent · 本地' })).toBeTruthy()
-    expect(screen.queryByRole('menuitem', { name: 'CreatorHub · Cohub Agent · 云端' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Studio Research Swarm · Cohub' })).toBeTruthy()
+    expect(screen.queryByText(/DSH Agent/)).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'CreatorHub · Cohub' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'Alpha Project' })).toBeNull()
   })
 
-  it('offers separate Cohub Agent and local DSH Agent modes for one Space', async () => {
+  it('offers only the cloud Cohub conversation for one Space', async () => {
     const sourceId = 'cohub' as RemoteRootSourceId
     const rootId = 'space-1' as RemoteResourceId
     const remoteRoots: RemoteRootsSnapshot = {
@@ -174,17 +172,13 @@ describe('WorkspacePicker', () => {
       }],
     }
     const b = mount([], vi.fn(), occupancySource(), remoteRoots)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'deepseek harness · Cohub Agent · 云端' }))
+    expect(screen.queryByText(/DSH Agent/)).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'deepseek harness · Cohub' }))
     expect(b.openRemoteConversation).toHaveBeenCalledWith(sourceId, rootId)
     await waitFor(() => { expect(b.onClose).toHaveBeenCalled() })
     expect(b.onPick).not.toHaveBeenCalled()
     expect(b.createWorkspace).not.toHaveBeenCalled()
 
-    b.view.unmount()
-    const local = mount([], vi.fn(), occupancySource(), remoteRoots)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'deepseek harness · DSH Agent · 本地' }))
-    expect(local.startRemoteWorkspace).toHaveBeenCalledWith(sourceId, rootId)
-    await waitFor(() => { expect(local.onClose).toHaveBeenCalled() })
   })
 
   it('lists same-title Workspaces separately and forwards the selected id', () => {
@@ -284,7 +278,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open useSessions={hook(sessions)} useWorkspaces={hook(workspaceState([workspace('alpha', 'Alpha')]))}
-        useRemoteRoots={hook(emptyRemoteRoots)} startRemoteWorkspace={vi.fn()} openRemoteConversation={vi.fn()}
+        useRemoteRoots={hook(emptyRemoteRoots)} openRemoteConversation={vi.fn()}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}
       />,
@@ -300,7 +294,7 @@ describe('WorkspacePicker', () => {
     render(
       <WorkspacePicker
         open anchorRef={anchor()} useSessions={hook(sessions)} useWorkspaces={hook(state)}
-        useRemoteRoots={hook(emptyRemoteRoots)} startRemoteWorkspace={vi.fn()} openRemoteConversation={vi.fn()}
+        useRemoteRoots={hook(emptyRemoteRoots)} openRemoteConversation={vi.fn()}
         onPick={vi.fn()} onClose={vi.fn()} createWorkspace={vi.fn()}
         useDirectoryFlow={occupancySource().useDirectoryFlow} renderSlot={renderSlot} t={t}
       />,

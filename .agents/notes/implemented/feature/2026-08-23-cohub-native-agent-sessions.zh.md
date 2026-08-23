@@ -4,6 +4,8 @@
 
 [English](2026-08-23-cohub-native-agent-sessions.md) | 中文
 
+本 Note 中云端／本地双条目的呈现方式已由 [Cohub 云端选择与本地 @Space 引用](2026-08-23-cohub-space-at-references.zh.md) 取代。原生 Cohub Session 的归属不变。
+
 ## 问题
 
 DSH 已经支持把 Cohub Space 绑定给本地 Agent，作为远端上下文使用。这个形态有价值，但它并不等于在 Space 内运行 Cohub Agent：Agent、prompt、Turn 生命周期和 Session 持久化仍在本地。过去一个没有明确模式的 Space 入口承载了两种含义，用户无法判断执行发生在哪里，也无法在 Cohub 中继续同一个云端 Session。

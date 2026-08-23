@@ -169,6 +169,36 @@ describe('CohubSpacesGateway', () => {
     })
   })
 
+  it('gives every local DSH Agent @-reference tools that require an explicit Cohub Space id', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ path: '', entries: [] })))
+    const { ctx, agents } = await boot()
+    const tools: { name: string; execute(args: unknown, exec: { signal: AbortSignal }): Promise<unknown> }[] = []
+    const sections: unknown[] = []
+    const agent = {
+      id: SessionId('local-session-1'),
+      session: { events: [] },
+      ctx: {
+        systemPrompt: { section: vi.fn((section: unknown) => { sections.push(section); return vi.fn() }) },
+        tools: { register: vi.fn((tool: typeof tools[number]) => { tools.push(tool); return vi.fn() }) },
+      },
+      inject: vi.fn(),
+    } as unknown as Agent
+    agents.agent = agent
+
+    ctx.emit('agent/created', { agent })
+
+    expect(tools.map(tool => tool.name)).toEqual([
+      'cohub_space_list', 'cohub_space_read', 'cohub_space_write', 'cohub_space_run',
+    ])
+    expect(sections).toHaveLength(1)
+    expect(sections[0]).toMatchObject({ name: 'cohub-space-references' })
+    expect((sections[0] as { text: string }).text).toContain('@Cohub Space')
+    await expect(tools[0]!.execute({}, { signal: new AbortController().signal }))
+      .rejects.toThrow('space_id is required')
+    await expect(tools[0]!.execute({ space_id: 'space-1' }, { signal: new AbortController().signal }))
+      .resolves.toEqual({ spaceId: 'space-1', path: '', entries: [] })
+  })
+
   it('binds Cohub tools and context onto the existing DSH Agent without calling Cohub Agent', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json([{ id: 'space-1', title: 'deepseek harness' }]))
@@ -199,7 +229,10 @@ describe('CohubSpacesGateway', () => {
     await expect(spaces.bindDshSession('space-1', 'dsh-session-1')).resolves.toEqual({
       spaceId: 'space-1', spaceTitle: 'deepseek harness', dshSessionId: 'dsh-session-1',
     })
-    expect(sections).toHaveLength(1)
+    expect(sections).toMatchObject([
+      { name: 'cohub-space-references' },
+      { name: 'cohub-space-workspace' },
+    ])
     expect(tools.map(tool => tool.name)).toEqual([
       'cohub_space_list', 'cohub_space_read', 'cohub_space_write', 'cohub_space_run',
     ])

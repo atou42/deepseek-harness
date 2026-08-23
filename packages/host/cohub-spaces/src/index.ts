@@ -74,6 +74,15 @@ function bindingText(binding: SpaceBinding): string {
   return `${BINDING_PREFIX}${JSON.stringify(binding)}\nThis DSH Session can use its ordinary local tools and the bound Cohub Space tools together. Cohub paths are relative to the Space root.`
 }
 
+function disposeStack(disposers: (() => void)[]): () => void {
+  let disposed = false
+  return () => {
+    if (disposed) return
+    disposed = true
+    for (const unregister of disposers.reverse()) unregister()
+  }
+}
+
 function parseBindingText(value: string): SpaceBinding | undefined {
   const firstLine = value.split('\n', 1)[0]
   if (!firstLine?.startsWith(BINDING_PREFIX)) return undefined
@@ -427,6 +436,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
   private readonly lifetime = new AbortController()
   private readonly active = new Set<Promise<unknown>>()
   private readonly bindings = new Map<string, SpaceBinding & { readonly dispose: () => void }>()
+  private readonly referenceTools = new Map<string, { readonly agent: Agent; readonly dispose: () => void }>()
   private closed = false
 
   constructor(ctx: Context, config: Config = {}) {
@@ -442,11 +452,17 @@ export class CohubSpacesGateway extends TypertRemoteService {
       if (!this.closed) this.ctx.emit('cohub-spaces/changed')
     })
     const stopCreated = this.ctx.on('agent/created', ({ agent }) => {
+      this.installReferenceTools(agent)
       const binding = this.bindingFromSession(agent)
       if (binding !== undefined) this.installBinding(agent, binding, false)
     })
     const stopDisposed = this.ctx.on('agent/disposed', ({ agent }) => {
       this.bindings.delete(agent.id)
+      const installed = this.referenceTools.get(agent.id)
+      if (installed?.agent === agent) {
+        installed.dispose()
+        this.referenceTools.delete(agent.id)
+      }
     })
     yield async () => {
       this.closed = true
@@ -455,6 +471,8 @@ export class CohubSpacesGateway extends TypertRemoteService {
       stopDisposed()
       for (const binding of this.bindings.values()) binding.dispose()
       this.bindings.clear()
+      for (const installed of this.referenceTools.values()) installed.dispose()
+      this.referenceTools.clear()
       this.lifetime.abort(new Error('cohub-spaces: service disposed'))
       await Promise.allSettled([...this.active])
     }
@@ -711,6 +729,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
     }
     const space = (await this.listSpacesImpl()).find(item => item.id === spaceId)
     if (space === undefined) throw new Error(`cohub-spaces: Space "${spaceId}" is not accessible to the current account`)
+    this.installReferenceTools(agent)
     this.installBinding(agent, { spaceId, spaceTitle: space.title }, true)
     return Object.freeze({ spaceId, spaceTitle: space.title, dshSessionId })
   }
@@ -744,19 +763,13 @@ export class CohubSpacesGateway extends TypertRemoteService {
       return
     }
     const disposers: (() => void)[] = []
-    let disposed = false
-    const dispose = (): void => {
-      if (disposed) return
-      disposed = true
-      for (const unregister of disposers.reverse()) unregister()
-    }
+    const dispose = disposeStack(disposers)
     try {
       disposers.push(agent.ctx.systemPrompt.section({
         name: 'cohub-space-workspace',
         order: 50,
         text: `This DSH Session is attached to Cohub Space ${JSON.stringify(binding.spaceTitle)} (${binding.spaceId}). Keep using ordinary local DSH tools for local work. Use the cohub_space_* tools for cloud files and commands; their paths are relative to the Space root.`,
       }))
-      disposers.push(...this.registerBindingTools(agent, binding.spaceId))
       this.bindings.set(agent.id, Object.freeze({ ...binding, dispose }))
       if (injectContext) {
         agent.inject(createUserMessage({
@@ -771,47 +784,88 @@ export class CohubSpacesGateway extends TypertRemoteService {
     }
   }
 
-  private registerBindingTools(agent: Agent, spaceId: string): (() => void)[] {
+  private installReferenceTools(agent: Agent): void {
+    const current = this.referenceTools.get(agent.id)
+    if (current !== undefined) {
+      if (current.agent !== agent) throw new Error(`cohub-spaces: conflicting live Agent "${agent.id}"`)
+      return
+    }
+    const disposers: (() => void)[] = []
+    const dispose = disposeStack(disposers)
+    try {
+      disposers.push(agent.ctx.systemPrompt.section({
+        name: 'cohub-space-references',
+        order: 49,
+        text: 'When a user adds an @Cohub Space reference, use the cohub_space_* tools with the exact space_id carried by that reference. A Cohub Space is cloud storage, not a local path. Do not access a Space unless the user referenced it or explicitly supplied its id.',
+      }))
+      disposers.push(...this.registerReferenceTools(agent))
+      this.referenceTools.set(agent.id, Object.freeze({ agent, dispose }))
+    } catch (error) {
+      dispose()
+      throw error
+    }
+  }
+
+  private referencedSpaceId(agent: Agent, value: unknown): string {
+    if (value !== undefined) return nonBlank(value, 'space_id')
+    const binding = this.bindings.get(agent.id)
+    if (binding !== undefined) return binding.spaceId
+    throw new TypeError('cohub-spaces: space_id is required unless this DSH Session has a legacy Space binding')
+  }
+
+  private registerReferenceTools(agent: Agent): (() => void)[] {
     const render = (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }]
     const json = (value: unknown): JsonValue => structuredClone(value) as JsonValue
     return [
       agent.ctx.tools.register(defineTool({
         name: 'cohub_space_list',
-        description: 'List one directory in the Cohub Space attached to this DSH Session. Paths are Space-relative POSIX paths.',
+        description: 'List one directory in a referenced Cohub Space. Paths are Space-relative POSIX paths.',
         parameters: {
+          space_id: { type: 'string', description: 'Exact Space id from the @Cohub Space reference. Omit only for a legacy bound Session.' },
           path: { type: 'string', description: 'Directory path relative to the Space root. Omit for the root.' },
         },
         output: { schema: { type: 'json' }, render },
-        execute: async (args, exec) => json(await this.listDirectoryImpl(spaceId, args.path ?? '', exec.signal)),
+        execute: async (args, exec) => json(await this.listDirectoryImpl(this.referencedSpaceId(agent, args.space_id), args.path ?? '', exec.signal)),
       })),
       agent.ctx.tools.register(defineTool({
         name: 'cohub_space_read',
-        description: 'Read one UTF-8 text file from the Cohub Space attached to this DSH Session.',
+        description: 'Read one UTF-8 text file from a referenced Cohub Space.',
         parameters: {
+          space_id: { type: 'string', description: 'Exact Space id from the @Cohub Space reference. Omit only for a legacy bound Session.' },
           path: { type: 'string', required: true, description: 'File path relative to the Space root.' },
         },
         output: { schema: { type: 'json' }, render },
-        execute: async (args, exec) => json(await this.readTextImpl(spaceId, args.path, exec.signal)),
+        execute: async (args, exec) => json(await this.readTextImpl(this.referencedSpaceId(agent, args.space_id), args.path, exec.signal)),
       })),
       agent.ctx.tools.register(defineTool({
         name: 'cohub_space_write',
-        description: 'Compare-and-set one UTF-8 text file in the attached Cohub Space. Read first and pass its revision.',
+        description: 'Compare-and-set one UTF-8 text file in a referenced Cohub Space. Read first and pass its revision.',
         parameters: {
+          space_id: { type: 'string', description: 'Exact Space id from the @Cohub Space reference. Omit only for a legacy bound Session.' },
           path: { type: 'string', required: true, description: 'File path relative to the Space root.' },
           content: { type: 'string', required: true, description: 'Complete replacement content.' },
           if_revision: { type: 'string', required: true, description: 'Revision returned by cohub_space_read.' },
         },
         output: { schema: { type: 'json' }, render },
-        execute: async (args, exec) => json(await this.writeTextImpl(spaceId, args.path, args.content, args.if_revision, exec.signal)),
+        execute: async (args, exec) => json(await this.writeTextImpl(
+          this.referencedSpaceId(agent, args.space_id),
+          args.path,
+          args.content,
+          args.if_revision,
+          exec.signal,
+        )),
       })),
       agent.ctx.tools.register(defineTool({
         name: 'cohub_space_run',
-        description: 'Run a shell command inside the Cohub Space attached to this DSH Session and wait for its completed output.',
+        description: 'Run a shell command inside a referenced Cohub Space and wait for its completed output.',
         parameters: {
+          space_id: { type: 'string', description: 'Exact Space id from the @Cohub Space reference. Omit only for a legacy bound Session.' },
           command: { type: 'string', required: true, description: 'Non-empty shell command to run in the Cohub Space.' },
         },
         output: { schema: { type: 'json' }, render },
-        execute: async (args, exec) => json(await this.runCommandImpl(spaceId, args.command, exec.signal)),
+        execute: async (args, exec) => json(await this.runCommandImpl(
+          this.referencedSpaceId(agent, args.space_id), args.command, exec.signal,
+        )),
       })),
     ]
   }

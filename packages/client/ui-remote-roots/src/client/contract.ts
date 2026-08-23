@@ -18,7 +18,6 @@ export interface RemoteRootTreeInjected {
     sessionId?: RemoteResourceId,
     sessionTitle?: string,
   ): Promise<void>
-  startWorkspace(sourceId: RemoteRootSourceId, rootId: RemoteResourceId): Promise<void>
 }
 
 /** Render props for the remote-root navigation tree. */

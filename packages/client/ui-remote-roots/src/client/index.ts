@@ -31,7 +31,6 @@ export function apply(ctx: ClientContext): void {
         list: (sourceId, request) => ctx.remoteRoots.list(sourceId, request),
         openConversation: (sourceId, rootId, sessionId, sessionTitle) =>
           ctx.remoteRoots.openConversation(sourceId, rootId, sessionId, sessionTitle),
-        startWorkspace: (sourceId, rootId) => ctx.remoteRoots.startWorkspace(sourceId, rootId),
       }),
     },
     RemoteRootTree,

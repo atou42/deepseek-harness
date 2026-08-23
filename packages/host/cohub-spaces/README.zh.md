@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Host 侧 Cohub Space 适配器。它只通过唯一的 `ctx.cohubAccount` 所有者取得访问令牌，校验平台返回的每一份数据，并提供类型化 Remote 方法，用于列出可访问 Space、完整读取分页 Session 和 Turn、提交和取消原生 Cohub Agent Turn、执行相对目录树与文本文件操作、解析独立的本地 cwd 锚点，以及把 Space 绑定到一个仍为空白的 DSH Session。原生 prompt 的执行和持久化留在 Cohub；绑定模式保留本地 DSH Agent 与工具，再加入限定到该 Space 的目录读取、文件读取、版本校验写入和命令工具。Space 始终是远程语义根；本包不会把它的路径映射到本地文件系统，也不会运行同步循环或发布 Work。
+Host 侧 Cohub Space 适配器。它只通过唯一的 `ctx.cohubAccount` 所有者取得访问令牌，校验平台返回的每一份数据，并提供类型化 Remote 方法，用于列出可访问 Space、完整读取分页 Session 和 Turn、提交和取消原生 Cohub Agent Turn，以及执行相对目录树、文本文件和命令操作。每个本地 DSH Agent 都会获得四个 Cohub 工具；普通会话必须从 `@Cohub Space` 引用取得明确的 `space_id`，旧版已绑定会话仍可省略该参数。Space 始终是远程语义根；本包不会把它的路径映射到本地文件系统，也不会运行同步循环或发布 Work。
 
 实现直接调用 Cohub 平台 HTTP API，不依赖 Cohub CLI 或 SDK。Space、Session、Turn 与文件标识可以经过浏览器边界，账号凭证不会。原生 prompt 必须带调用方生成的 `clientMessageId`，只接受 Cohub 的即时 Session/Turn 响应；取消前会校验 Turn 的 Space 归属。Session 分页遇到重复游标、重复身份、损坏的标题类型或跨 Space 数据时会明确失败，不会返回残缺列表；空字符串或 null 的 Session 标题会作为无标题会话处理，由浏览器生成显示名称。文件版本会原样保留平台返回的毫秒时间戳（包括小数毫秒）和字节大小。二进制文件与 URL 交付文件会明确失败。过期版本写入会返回当前远端文本与版本，不会覆盖它。命令会在配置的时间范围内轮询 Cohub 任务，直到成功或失败。
 
@@ -15,11 +15,11 @@ Host 侧 Cohub Space 适配器。它只通过唯一的 `ctx.cohubAccount` 所有
 
 ## 模型体验
 
-无全局影响，因为适配器不会修改全局模型配置；绑定只会在所选 DSH Agent 的作用域内注入一条可持久化的说明，并注册四个工具。Agent 原有的本地上下文与工具保持可用，因此一段 DSH 对话可以同时操作本地文件和已绑定的 Cohub Space。
+适配器会给每个本地 DSH Agent 加入一条简短的 `@Cohub Space` 使用说明和四个工具。只有实际引用的 Space id 才能驱动云端访问；Agent 原有的本地上下文与工具保持可用。
 
 #### KV Cache 影响
 
-绑定说明和四个工具 schema 会为该 Session 的每次请求增加一小段稳定前缀。工具结果进入普通 DSH 历史，并遵循其压缩行为。
+引用说明和四个工具 schema 会为本地 Session 的每次请求增加一小段稳定前缀。具体 Space 名称和 id 只在引用它的轮次出现；工具结果进入普通 DSH 历史，并遵循其压缩行为。
 
 ## 已知限制与后续工作
 

@@ -3,9 +3,11 @@ import { Context } from '@deepseek-ai/cordis'
 import { RemoteRootsService } from '@deepseek-ai/dsh-client-remote-roots/src/client/service.ts'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { RemoteResourceId } from '@deepseek-ai/dsh-client-remote-roots/client'
+import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   apply,
   CohubSpacesRemoteRootSource,
+  createCohubSpaceReferenceSource,
   type CohubSpacesRemoteApi,
 } from '../src/client/index.ts'
 
@@ -24,8 +26,8 @@ function remote(overrides: Partial<CohubSpacesRemoteApi> = {}): CohubSpacesRemot
   }
 }
 
-function source(api: CohubSpacesRemoteApi, startDshSession = vi.fn(async () => {})): CohubSpacesRemoteRootSource {
-  return new CohubSpacesRemoteRootSource(api, startDshSession)
+function source(api: CohubSpacesRemoteApi): CohubSpacesRemoteRootSource {
+  return new CohubSpacesRemoteRootSource(api)
 }
 
 async function registry(source: CohubSpacesRemoteRootSource) {
@@ -55,11 +57,11 @@ describe('CohubSpacesRemoteRootSource', () => {
         roots: [
           {
             id: 'space-1', title: 'World Bible', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: 'interactive' },
+            capabilities: { browse: true, read: false, write: false, workspace: false, conversation: 'interactive' },
           },
           {
             id: 'space-2', title: 'Drafts', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: 'interactive' },
+            capabilities: { browse: true, read: false, write: false, workspace: false, conversation: 'interactive' },
           },
         ],
       }],
@@ -126,7 +128,7 @@ describe('CohubSpacesRemoteRootSource', () => {
     provider.dispose()
   })
 
-  it('projects Cohub history and starts a DSH Session for the selected Space', async () => {
+  it('projects Cohub history without exposing a local DSH start mode', async () => {
     const getConversation = vi.fn(async (spaceId: string, sessionId: string) => ({
       spaceId,
       session: { id: sessionId, spaceId, title: 'Existing chat', status: 'active', updatedAt: '2026-08-16T10:00:00.000Z' },
@@ -135,8 +137,7 @@ describe('CohubSpacesRemoteRootSource', () => {
         createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
       }],
     }))
-    const startDshSession = vi.fn(async () => {})
-    const provider = source(remote({ getConversation }), startDshSession)
+    const provider = source(remote({ getConversation }))
     const rootId = 'space-1' as RemoteResourceId
     const existingId = JSON.stringify(['space-1', 'session-1']) as RemoteResourceId
 
@@ -145,9 +146,48 @@ describe('CohubSpacesRemoteRootSource', () => {
       session: { id: existingId, title: 'Existing chat', status: 'active' },
       turns: [{ id: JSON.stringify(['space-1', 'session-1', 'turn-1']), userText: 'hello', assistantText: 'world' }],
     })
-    await expect(provider.startWorkspace({ rootId })).resolves.toBeUndefined()
     expect(getConversation).toHaveBeenCalledWith('space-1', 'session-1')
-    expect(startDshSession).toHaveBeenCalledWith('space-1')
+    expect('startWorkspace' in provider).toBe(false)
+    provider.dispose()
+  })
+
+  it('exposes Cohub Spaces as searchable @ references for local DSH Sessions', async () => {
+    const provider = source(remote({
+      listSpaces: vi.fn(async () => [
+        { id: 'space/a', title: 'World Bible' },
+        { id: 'space-b', title: 'Drafts' },
+      ]),
+    }))
+    await provider.refresh()
+    const reference = createCohubSpaceReferenceSource(provider.snapshot)
+    const signal = new AbortController().signal
+
+    const candidates = await reference.candidates(
+      { sessionId: 'local-session' as never },
+      { query: 'world', position: 'inline', signal },
+    )
+    expect(candidates).toEqual([{
+      name: 'World Bible', description: 'Cohub 云端资产', section: 'Cohub Spaces',
+      value: JSON.stringify({ version: 1, spaceId: 'space/a', title: 'World Bible' }),
+    }])
+    const picked = reference.onPick({
+      candidate: candidates[0]!, session: { sessionId: 'local-session' as never },
+      position: 'inline', via: 'menu', span: { start: 0, end: 6, draftRev: 1 },
+    })
+    expect(picked).toEqual({
+      insert: {
+        source: 'cohub-space',
+        ref: JSON.stringify({ version: 1, spaceId: 'space/a', title: 'World Bible' }),
+        label: 'World Bible', appearance: 'folder',
+        clipboardText: '@[World Bible](cohub-space:space%2Fa)',
+      },
+    })
+    const ref = (picked as { insert: { ref: string } }).insert.ref
+    await expect(reference.codec?.serialize(ref, signal)).resolves.toBe(
+      'Cohub Space reference: title="World Bible", space_id="space/a". Use the cohub_space_* tools with this exact space_id to access its cloud assets. Do not treat it as a local path.',
+    )
+    expect(reference.codec?.clipboardText(ref)).toBe('@[World Bible](cohub-space:space%2Fa)')
+    expect(() => reference.codec?.clipboardText('{}')).toThrow(/reference is malformed/)
     provider.dispose()
   })
 
@@ -282,17 +322,8 @@ describe('CohubSpacesRemoteRootSource', () => {
     const listSpaces = vi.fn(async () => ({
       ok: true as const, value: [{ id: 'space-1', title: 'World' }],
     }))
-    const create = vi.fn(async () => 'dsh-session-1')
-    const open = vi.fn()
-    const createWorkspace = vi.fn(async () => ({ workspaceId: 'local-workspace-1' }))
-    const getDshSessionStart = vi.fn(async () => ({
-      ok: true as const,
-      value: { spaceId: 'space-1', cwd: '/local/deepseek-harness' },
-    }))
-    const bindDshSession = vi.fn(async () => ({
-      ok: true as const,
-      value: { spaceId: 'space-1', spaceTitle: 'World', dshSessionId: 'dsh-session-1' },
-    }))
+    let referenceSource: InputTriggerSource | undefined
+    const unregisterReference = vi.fn()
     const ctx = {
       remote: {
         cohubAccount: { getAccount },
@@ -300,14 +331,16 @@ describe('CohubSpacesRemoteRootSource', () => {
           listSpaces,
           listSessions: vi.fn(),
           getConversation: vi.fn(),
-          getDshSessionStart,
-          bindDshSession,
         },
         $on: vi.fn((_event, listener: () => void) => { changed = listener; return off }),
       },
       remoteRoots: { register },
-      sessions: { create, open },
-      workspaces: { create: createWorkspace },
+      inputTriggers: {
+        registerSource: vi.fn((source: InputTriggerSource) => {
+          referenceSource = source
+          return unregisterReference
+        }),
+      },
     } as unknown as ClientContext
 
     const dispose = apply(ctx)
@@ -327,16 +360,10 @@ describe('CohubSpacesRemoteRootSource', () => {
       })
     })
     expect(listSpaces).toHaveBeenCalledOnce()
-    await registeredSource!.startWorkspace({ rootId: 'space-1' as RemoteResourceId })
-    expect(getDshSessionStart).toHaveBeenCalledWith('space-1')
-    expect(createWorkspace).toHaveBeenCalledWith({ path: '/local/deepseek-harness' })
-    expect(create).toHaveBeenCalledWith({ workspaceId: 'local-workspace-1' })
-    expect(bindDshSession).toHaveBeenCalledWith('space-1', 'dsh-session-1')
-    expect(open).toHaveBeenCalledWith('dsh-session-1')
-    expect(create.mock.invocationCallOrder[0]).toBeLessThan(bindDshSession.mock.invocationCallOrder[0]!)
-    expect(bindDshSession.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]!)
+    expect(referenceSource?.name).toBe('cohub-space')
     dispose()
     expect(off).toHaveBeenCalledOnce()
     expect(unregister).toHaveBeenCalledOnce()
+    expect(unregisterReference).toHaveBeenCalledOnce()
   })
 })

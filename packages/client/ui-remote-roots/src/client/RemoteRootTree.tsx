@@ -77,11 +77,10 @@ interface FolderProps {
   readonly depth: number
   readonly list: RemoteRootTreeProps['list']
   readonly openConversation: RemoteRootTreeProps['openConversation']
-  readonly startWorkspace: RemoteRootTreeProps['startWorkspace']
   readonly t: Translate
 }
 
-function Folder({ sourceId, rootId, id, name, marker, capabilities, depth, list, openConversation, startWorkspace, t }: FolderProps) {
+function Folder({ sourceId, rootId, id, name, marker, capabilities, depth, list, openConversation, t }: FolderProps) {
   const [open, setOpen] = useState(false)
   const [listing, setListing] = useState<ListingState>({ status: 'idle' })
   const request = useRef<{ controller: AbortController; generation: number }>()
@@ -168,14 +167,6 @@ function Folder({ sourceId, rootId, id, name, marker, capabilities, depth, list,
                   onClick={() => { runAction(() => openConversation(sourceId, rootId)) }}
                 >{t('mode.cohub')}</button>
               )}
-              {capabilities.workspace === true && (
-                <button
-                  type="button"
-                  disabled={actionBusy}
-                  aria-label={t('mode.dsh.aria', { name })}
-                  onClick={() => { runAction(() => startWorkspace(sourceId, rootId)) }}
-                >{t('mode.dsh')}</button>
-              )}
             </div>
           )}
           {actionError !== undefined && <p className={css.error} role="alert">{actionError}</p>}
@@ -200,7 +191,6 @@ function Folder({ sourceId, rootId, id, name, marker, capabilities, depth, list,
                 depth={depth + 1}
                 list={list}
                 openConversation={openConversation}
-                startWorkspace={startWorkspace}
                 t={t}
               />
             )
@@ -216,7 +206,7 @@ function Folder({ sourceId, rootId, id, name, marker, capabilities, depth, list,
   )
 }
 
-export function RemoteRootTree({ useRemoteRoots, list, openConversation, startWorkspace, t }: RemoteRootTreeProps) {
+export function RemoteRootTree({ useRemoteRoots, list, openConversation, t }: RemoteRootTreeProps) {
   const sources = useRemoteRoots(snapshot => snapshot.sources)
   if (sources.length === 0) return null
   return (
@@ -244,7 +234,6 @@ export function RemoteRootTree({ useRemoteRoots, list, openConversation, startWo
                 depth={0}
                 list={list}
                 openConversation={openConversation}
-                startWorkspace={startWorkspace}
                 t={t}
               />
             ))}

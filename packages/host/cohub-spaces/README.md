@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Host-side Cohub Space adapter. It uses the sole `ctx.cohubAccount` owner for access tokens, validates every platform response, and exposes typed Remote methods for listing accessible Spaces, paginated Sessions and Turns, submitting and aborting native Cohub Agent Turns, relative-tree and text-file operations, resolving the separate local cwd anchor, and binding a Space to a live blank DSH Session. Native prompt submission keeps execution and persistence in Cohub; binding keeps the ordinary local DSH Agent and tools, then adds Space-scoped list, read, compare-and-set write, and command tools. A Space remains a remote semantic root; this package never maps its paths onto the local filesystem, runs a sync loop, or publishes Works.
+Host-side Cohub Space adapter. It uses the sole `ctx.cohubAccount` owner for access tokens, validates every platform response, and exposes typed Remote methods for listing accessible Spaces, paginated Sessions and Turns, submitting and aborting native Cohub Agent Turns, and relative-tree, text-file, and command operations. Every local DSH Agent receives four Cohub tools: ordinary Sessions must supply the exact `space_id` from an `@Cohub Space` reference, while legacy bound Sessions may omit it. A Space remains a remote semantic root; this package never maps its paths onto the local filesystem, runs a sync loop, or publishes Works.
 
 The implementation calls the Cohub platform HTTP API directly and has no Cohub CLI or SDK dependency. Space, Session, Turn, and file identifiers cross the browser boundary, but account credentials do not. Native prompts require a caller-generated `clientMessageId`, accept only Cohub's immediate Session/Turn response, and verify Space ownership before aborting a Turn. Session pagination rejects repeated cursors, duplicate identities, malformed title types, and cross-Space rows instead of returning a partial list; an empty or null Session title is projected as untitled and the browser derives its display name. File revisions preserve the platform's millisecond timestamp, including fractional milliseconds, together with the byte size. Binary and URL-delivered files fail explicitly. A stale write returns the current remote text and revision instead of overwriting it. Commands poll their Cohub task to a completed or failed terminal state within configured bounds.
 
@@ -15,11 +15,11 @@ The implementation calls the Cohub platform HTTP API directly and has no Cohub C
 
 ## Model Experience
 
-None, as the adapter changes no global model configuration; binding adds one durable instruction and four tools only to the selected DSH Agent. The Agent keeps its normal local context and tools, so one DSH conversation can operate on local files and the attached Cohub Space.
+None, as the adapter does not change the selected model or execution owner; it adds one stable `@Cohub Space` instruction and four explicit cloud tools to local DSH Agents.
 
 #### KV Cache effect
 
-The binding instruction and four tool schemas add a small stable prefix to each request in that Session. Tool results enter normal DSH history and follow its compaction behavior.
+The reference instruction and four tool schemas add a small stable prefix to each local Session request. A concrete Space title and id enter only the turn that references it. Tool results enter normal DSH history and follow its compaction behavior.
 
 ## Known Limitations and Deferred Work
 

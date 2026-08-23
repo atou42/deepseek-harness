@@ -118,7 +118,7 @@ describe('remote roots through the assembled Workspace browser', () => {
         },
         turns: [],
       })),
-    }, vi.fn(async () => {}))
+    })
     const service = runtime.ctx.get('remoteRoots') as RemoteRootsService
     const disposeProvider = service.register(source)
     await source.refresh()

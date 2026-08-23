@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Shared Workspace browser and picker plugin. `WorkspaceBrowser` fills the sidebar's `sidebar.workspaces` slot, while `WorkspacePicker` fills the page-local Session Intent hero's `conversation.hero.workspace` slot. The main picker lists and searches local Workspaces and remote roots together. A root that supports both modes appears as two explicit rows: **Cohub Agent · Cloud** opens provider-owned conversation state, while **DSH Agent · Local** awaits the provider's ordinary local DSH Session setup. Neither row silently changes execution ownership or adopts the remote root as a local Workspace.
+Shared Workspace browser and picker plugin. `WorkspaceBrowser` fills the sidebar's `sidebar.workspaces` slot, while `WorkspacePicker` fills the page-local Session Intent hero's `conversation.hero.workspace` slot. The main picker lists and searches local Workspaces and remote roots together. A remote root appears once with its provider marker; selecting a Cohub Space opens Cohub-owned cloud conversation state, never a local DSH Session or an adopted Workspace. A local Session references Cohub cloud assets through the composer's `@` menu instead.
 
 The sidebar registration also declares a provider-neutral `sidebar.workspaces.remoteRoots` child hole. A separately loadable presentation package may render marked, folder-like remote roots there, but the hole's empty owner share deliberately grants no Workspace, path, cwd, or Shell semantics. Remote roots disappear during local Session search and never enter `useWorkspaces`.
 

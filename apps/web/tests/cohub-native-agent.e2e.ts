@@ -139,10 +139,10 @@ describe('web e2e: native Cohub Agent Sessions', () => {
     await menu.waitFor({ timeout: 15_000 })
     const picker = await captureStableAria(page, '[role="menu"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(PICKER_EXPECTED, picker, MODE)
-    expect(picker).toContain('Native Space · Cohub Agent · Cloud')
-    expect(picker).toContain('Native Space · DSH Agent · Local')
+    expect(picker).toContain('Native Space · Cohub')
+    expect(picker).not.toContain('DSH Agent')
 
-    await page.getByRole('menuitem', { name: 'Native Space · Cohub Agent · Cloud' }).click()
+    await page.getByRole('menuitem', { name: 'Native Space · Cohub' }).click()
     const dialog = page.getByRole('dialog', { name: 'Cohub conversation' })
     await dialog.waitFor({ timeout: 15_000 })
     await dialog.getByRole('textbox', { name: 'Send to Cohub Agent' }).fill('Run in cloud')
