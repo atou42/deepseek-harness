@@ -25,6 +25,9 @@ import type {
   CohubSpaceView,
   CohubSpaceWriteResult,
   CohubAbortTurnResult,
+  CohubModelCatalog,
+  CohubPromptSelection,
+  CohubThinkingLevel,
   CohubPromptSubmission,
   CohubSessionView,
   CohubTurnView,
@@ -233,6 +236,57 @@ function parseSpaces(value: unknown): readonly CohubSpaceView[] {
     ids.add(id)
     return Object.freeze({ id, title: spaceTitle(entry, index) })
   }))
+}
+
+const THINKING_LEVELS = new Set<CohubThinkingLevel>([
+  'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max',
+])
+
+function parseModels(value: unknown): CohubModelCatalog {
+  const catalog = record(value, 'models response')
+  const groups = Object.entries(catalog).map(([groupId, rawEntries]) => {
+    const id = nonBlank(groupId, 'model provider id')
+    if (!Array.isArray(rawEntries)) {
+      throw new TypeError(`cohub-spaces: model provider "${id}" must be an array`)
+    }
+    const modelIds = new Set<string>()
+    const models = rawEntries.map((rawEntry, index) => {
+      const entry = record(rawEntry, `model provider "${id}" entry ${String(index)}`)
+      const provider = nonBlank(entry.provider, `model provider "${id}" entry ${String(index)} provider`)
+      if (provider !== id) {
+        throw new TypeError(`cohub-spaces: model provider "${id}" entry ${String(index)} has mismatched provider`)
+      }
+      const modelId = nonBlank(entry.id, `model provider "${id}" entry ${String(index)} id`)
+      if (modelIds.has(modelId)) throw new TypeError(`cohub-spaces: duplicate model "${id}/${modelId}"`)
+      modelIds.add(modelId)
+      const metadata = record(entry.model, `model "${id}/${modelId}" metadata`)
+      const rawName = metadata.name ?? metadata.title
+      const name = rawName === undefined ? modelId : nonBlank(rawName, `model "${id}/${modelId}" name`)
+      const description = optionalText(metadata.description, `model "${id}/${modelId}" description`)
+      return Object.freeze({
+        provider, id: modelId, name,
+        ...description === undefined ? {} : { description },
+      })
+    })
+    return Object.freeze({ id, name: id, models: Object.freeze(models) })
+  })
+  return Object.freeze({ groups: Object.freeze(groups) })
+}
+
+function promptSelection(value: CohubPromptSelection | undefined): CohubPromptSelection | undefined {
+  if (value === undefined) return undefined
+  const provider = value.provider === undefined ? undefined : nonBlank(value.provider, 'prompt selection provider')
+  const model = value.model === undefined ? undefined : nonBlank(value.model, 'prompt selection model')
+  const thinkingLevel = value.thinkingLevel
+  if (thinkingLevel !== undefined && !THINKING_LEVELS.has(thinkingLevel)) {
+    throw new TypeError('cohub-spaces: prompt selection thinkingLevel is invalid')
+  }
+  if (provider === undefined) {
+    if (model !== undefined) throw new TypeError('cohub-spaces: prompt selection provider and model must be supplied together')
+    return thinkingLevel === undefined ? undefined : Object.freeze({ thinkingLevel })
+  }
+  if (model === undefined) throw new TypeError('cohub-spaces: prompt selection provider and model must be supplied together')
+  return Object.freeze({ provider, model, ...thinkingLevel === undefined ? {} : { thinkingLevel } })
 }
 
 interface SessionPage {
@@ -487,6 +541,12 @@ export class CohubSpacesGateway extends TypertRemoteService {
     return this.track(this.listSpacesImpl())
   }
 
+  /** List the native Cohub Agent text-model catalog. */
+  @Remote('listModels')
+  listModels(): Promise<CohubModelCatalog> {
+    return this.track(this.listModelsImpl())
+  }
+
   /**
    * List every conversation in one Space, following the platform cursor.
    * @param spaceId Cohub Space identity.
@@ -517,8 +577,14 @@ export class CohubSpacesGateway extends TypertRemoteService {
    * @returns The Cohub-owned Session and accepted Turn.
    */
   @Remote('sendPrompt')
-  sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission> {
-    return this.track(this.sendPromptImpl(spaceId, sessionId, content, clientMessageId))
+  sendPrompt(
+    spaceId: string,
+    sessionId: string | null,
+    content: string,
+    clientMessageId: string,
+    selection?: CohubPromptSelection,
+  ): Promise<CohubPromptSubmission> {
+    return this.track(this.sendPromptImpl(spaceId, sessionId, content, clientMessageId, selection))
   }
 
   /**
@@ -592,6 +658,11 @@ export class CohubSpacesGateway extends TypertRemoteService {
   private async listSpacesImpl(): Promise<readonly CohubSpaceView[]> {
     const { data } = await this.request('/api/spaces')
     return parseSpaces(data)
+  }
+
+  private async listModelsImpl(): Promise<CohubModelCatalog> {
+    const { data } = await this.request('/api/models')
+    return parseModels(data)
   }
 
   private async listSessionsImpl(spaceIdValue: string): Promise<CohubSpaceSessionList> {
@@ -669,11 +740,13 @@ export class CohubSpacesGateway extends TypertRemoteService {
     sessionIdValue: string | null,
     contentValue: string,
     clientMessageIdValue: string,
+    selectionValue?: CohubPromptSelection,
   ): Promise<CohubPromptSubmission> {
     const spaceId = nonBlank(spaceIdValue, 'spaceId')
     const sessionId = sessionIdValue === null ? undefined : nonBlank(sessionIdValue, 'sessionId')
     const content = nonBlank(contentValue, 'content')
     const clientMessageId = nonBlank(clientMessageIdValue, 'clientMessageId')
+    const selection = promptSelection(selectionValue)
     const { data } = await this.request(`/api/spaces/${encodeURIComponent(spaceId)}/prompt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -681,6 +754,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
         ...sessionId === undefined ? {} : { sessionId },
         content: [{ type: 'text', text: content }],
         clientMessageId,
+        ...selection,
         accessMode: 'full_access',
       }),
     })

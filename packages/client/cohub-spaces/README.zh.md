@@ -8,7 +8,7 @@
 
 ## 模型体验
 
-`@Cohub Space` 引用在提交本地 prompt 时会序列化为明确的 Space 名称和 id，并要求 Agent 使用对应云端工具，不会把它解释成本地路径。
+原生 Cohub 会话会显示 Cohub 当前模型目录，并在每个 Turn 转发用户可选的模型与思考强度；执行方仍是 Cohub。本地 DSH Session 中的 `@Cohub Space` 引用仍只会序列化明确的 Space 名称和 id，不会改变该本地 Session 的模型。
 
 #### KV Cache 影响
 

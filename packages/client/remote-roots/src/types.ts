@@ -73,6 +73,33 @@ export interface RemoteConversationTurn {
   readonly updatedAt: string
 }
 
+/** Thinking strengths shared by native remote-Agent providers. */
+export type RemoteConversationThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** One provider-owned model offered by a native remote conversation. */
+export interface RemoteConversationModel {
+  readonly provider: string
+  readonly id: string
+  readonly name: string
+  readonly description?: string
+}
+
+/** Provider-grouped model directory for native remote conversations. */
+export interface RemoteConversationModelCatalog {
+  readonly groups: readonly {
+    readonly id: string
+    readonly name: string
+    readonly models: readonly RemoteConversationModel[]
+  }[]
+}
+
+/** Per-Turn native remote model override selected in the composer. */
+export interface RemoteConversationSelection {
+  readonly provider?: string
+  readonly model?: string
+  readonly thinkingLevel?: RemoteConversationThinkingLevel
+}
+
 /** Conversation history for a selected remote Space or Session. */
 export interface RemoteConversationView {
   readonly rootId: RemoteResourceId
@@ -165,11 +192,16 @@ export interface RemoteRootSource {
     readonly sessionId?: RemoteResourceId
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationView>
+  listConversationModels?(request: {
+    readonly rootId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationModelCatalog>
   sendConversationMessage?(request: {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
     readonly content: string
     readonly clientMessageId: string
+    readonly selection?: RemoteConversationSelection
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationSubmission>
   abortConversationTurn?(request: {

@@ -4,7 +4,7 @@ Status: implemented
 
 English | [中文](2026-08-23-cohub-native-agent-sessions.zh.md)
 
-The two-row local/cloud presentation in this note is superseded by [Cohub cloud selection and local @Space references](2026-08-23-cohub-space-at-references.md). Native Cohub Session ownership remains unchanged.
+The two-row local/cloud presentation in this note is superseded by [Cohub cloud selection and local @Space references](2026-08-23-cohub-space-at-references.md), and the drawer presentation is superseded by the [native Cohub conversation surface](2026-08-23-cohub-native-conversation-surface.md). Native Cohub Session ownership remains unchanged.
 
 ## Problem
 

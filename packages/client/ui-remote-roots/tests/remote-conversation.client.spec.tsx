@@ -50,6 +50,14 @@ describe('RemoteConversationOverlay', () => {
     const view = render(
       <RemoteConversationOverlay
         useRemoteRoots={bindSnapshotSelector(snapshot)}
+        listConversationModels={vi.fn(async () => ({
+          groups: [{
+            id: 'deepseek', name: 'DeepSeek', models: [
+              { id: 'deepseek-v4-flash', provider: 'deepseek', name: 'DeepSeek V4 Flash' },
+              { id: 'deepseek-v4-pro', provider: 'deepseek', name: 'DeepSeek V4 Pro' },
+            ],
+          }],
+        }))}
         readConversation={readConversation}
         sendConversationMessage={sendConversationMessage}
         abortConversationTurn={vi.fn()}
@@ -57,7 +65,8 @@ describe('RemoteConversationOverlay', () => {
         t={t}
       />,
     )
-    expect(await view.findByRole('dialog', { name: 'Cohub 会话' })).toBeTruthy()
+    expect(await view.findByRole('main', { name: 'Cohub 会话' })).toBeTruthy()
+    expect(view.queryByRole('dialog')).toBeNull()
     expect(await view.findByText('已经接好了。')).toBeTruthy()
     expect(view.getByText('继续接入')).toBeTruthy()
     expect(view.getByRole('textbox', { name: '发送给 Cohub Agent' })).toBeTruthy()
@@ -66,11 +75,15 @@ describe('RemoteConversationOverlay', () => {
       rootId, sessionId, signal: expect.any(AbortSignal) as AbortSignal,
     })
 
+    fireEvent.click(await view.findByRole('button', { name: /选择 Cohub 模型/ }))
+    fireEvent.change(view.getByLabelText('模型'), { target: { value: 'deepseek\0deepseek-v4-pro' } })
+    fireEvent.change(view.getByLabelText('思考强度'), { target: { value: 'high' } })
     fireEvent.change(view.getByRole('textbox'), { target: { value: '继续' } })
     fireEvent.click(view.getByRole('button', { name: '发送' }))
     await vi.waitFor(() => { expect(sendConversationMessage).toHaveBeenCalledOnce() })
     expect(sendConversationMessage).toHaveBeenCalledWith(sourceId, {
       rootId, sessionId, content: '继续', clientMessageId: expect.any(String) as string,
+      selection: { provider: 'deepseek', model: 'deepseek-v4-pro', thinkingLevel: 'high' },
     })
   })
 
@@ -85,6 +98,7 @@ describe('RemoteConversationOverlay', () => {
     const view = render(
       <RemoteConversationOverlay
         useRemoteRoots={bindSnapshotSelector(snapshot)}
+        listConversationModels={vi.fn(async () => ({ groups: [] }))}
         readConversation={vi.fn()}
         sendConversationMessage={vi.fn()}
         abortConversationTurn={vi.fn()}
@@ -92,7 +106,7 @@ describe('RemoteConversationOverlay', () => {
         t={t}
       />,
     )
-    expect(view.getByRole('dialog', { name: 'Cohub 会话' })).toBeTruthy()
+    expect(view.getByRole('main', { name: 'Cohub 会话' })).toBeTruthy()
     expect(view.getByText('新的 Cohub 会话')).toBeTruthy()
     expect(view.getByRole('textbox', { name: '发送给 Cohub Agent' })).toBeTruthy()
   })
@@ -112,6 +126,7 @@ describe('RemoteConversationOverlay', () => {
     const view = render(
       <RemoteConversationOverlay
         useRemoteRoots={bindSnapshotSelector(snapshot)}
+        listConversationModels={vi.fn(async () => ({ groups: [] }))}
         readConversation={vi.fn()}
         sendConversationMessage={sendConversationMessage}
         abortConversationTurn={vi.fn()}
@@ -165,6 +180,7 @@ describe('RemoteConversationOverlay', () => {
     const view = render(
       <RemoteConversationOverlay
         useRemoteRoots={bindSnapshotSelector(snapshot)}
+        listConversationModels={vi.fn(async () => ({ groups: [] }))}
         readConversation={readConversation}
         sendConversationMessage={sendConversationMessage}
         abortConversationTurn={vi.fn()}

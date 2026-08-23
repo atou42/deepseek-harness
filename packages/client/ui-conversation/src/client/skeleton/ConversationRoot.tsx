@@ -190,6 +190,7 @@ export function ConversationRoot({
         {renderSlot('conversation.session', {})}
         {composerSeat}
       </div>
+      {renderSlot('conversation.remote', {})}
     </div>
   )
 }

@@ -1,20 +1,61 @@
-.overlay { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; }
-.mask { position: absolute; inset: 0; border: 0; background: var(--dsw-alias-bg-mask-1); cursor: default; }
-.panel { position: relative; z-index: 1; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: min(760px, 100%); height: 100%; background: var(--dsw-alias-bg-base); box-shadow: var(--dsw-shadow-lv3); }
-.header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
-.header h2 { margin: 0; color: var(--dsw-alias-label-primary); font-size: 18px; }
-.header p { margin: 4px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
-.header .mode { color: var(--dsw-alias-state-success-primary); font-weight: 600; }
-.iconButton { border: 0; border-radius: 8px; padding: 8px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.surface {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  --remote-content-width: 748px;
+  --remote-composer-width: 780px;
+}
+
+.header {
+  position: relative;
+  flex: none;
+  padding: 12px 28px 0 20px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.titleRow { display: flex; align-items: center; min-height: 32px; }
+.titleCluster { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; }
+.titleCluster h2 { overflow: hidden; margin: 0; font-size: 16px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.mode { flex: none; color: var(--dsw-alias-state-success-primary); font-size: 12px; font-weight: 600; }
+.iconButton { display: grid; place-items: center; border: 0; border-radius: 8px; padding: 8px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
 .iconButton:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.history { overflow-y: auto; padding: 24px; }
-.turn { display: grid; gap: 12px; margin-bottom: 24px; }
-.user { justify-self: end; max-width: 80%; border-radius: 14px 14px 3px 14px; padding: 10px 14px; background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); white-space: pre-wrap; }
-.assistant { color: var(--dsw-alias-label-primary); }
-.empty, .running { color: var(--dsw-alias-label-tertiary); }
-.error { color: var(--dsw-alias-state-error-primary); }
-.composer { padding: 14px 18px 18px; border-top: 1px solid var(--dsw-alias-border-l2); }
-.composerRow { display: flex; align-items: flex-end; gap: 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px; padding: 10px; background: var(--dsw-alias-bg-base); }
-.composerRow textarea { min-height: 54px; max-height: 180px; flex: 1; resize: vertical; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; }
-.composerRow button { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border: 0; border-radius: 50%; background: var(--dsw-alias-interactive-primary); color: var(--dsw-alias-label-reverse); cursor: pointer; }
-.composerRow button:disabled { opacity: .45; cursor: default; }
+.tabs { display: flex; min-height: 38px; align-items: flex-end; gap: 28px; }
+.activeTab { position: relative; padding: 0 0 10px; color: var(--dsw-alias-interactive-primary); font-size: 13px; font-weight: 600; }
+.activeTab::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; border-radius: 2px 2px 0 0; background: currentColor; content: ''; }
+
+.history { min-height: 0; flex: 1; overflow-y: auto; }
+.historyInner { width: min(var(--remote-content-width), calc(100% - 32px)); min-height: 100%; margin: 0 auto; padding: 42px 0 132px; box-sizing: border-box; }
+.turn { display: grid; gap: 14px; margin-bottom: 32px; }
+.user { justify-self: end; max-width: 80%; border-radius: 18px 18px 4px 18px; padding: 10px 15px; background: var(--dsw-alias-interactive-bg-hover); white-space: pre-wrap; }
+.assistant { min-width: 0; line-height: 1.7; }
+.running, .emptyState p { color: var(--dsw-alias-label-tertiary); }
+.error { margin: 6px 0; color: var(--dsw-alias-state-error-primary); }
+.emptyState { display: grid; min-height: 45vh; place-content: center; text-align: center; }
+.emptyState h3 { margin: 0; font-size: 26px; font-weight: 650; }
+.emptyState p { margin: 10px 0 0; }
+
+.composerArea { position: absolute; right: 0; bottom: 0; left: 0; z-index: 2; padding: 28px 16px 18px; background: linear-gradient(to bottom, transparent, var(--dsw-alias-bg-base) 26%); pointer-events: none; }
+.composerFrame { position: relative; width: min(var(--remote-composer-width), 100%); margin: 0 auto; pointer-events: auto; }
+.composerCard { display: flex; min-height: 118px; flex-direction: column; border: 1px solid var(--dsw-alias-border-l2); border-radius: 22px; padding: 14px 14px 10px; background: var(--dsw-alias-bg-base); box-shadow: var(--dsw-shadow-lv1); }
+.composerCard textarea { min-height: 54px; max-height: 180px; flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; line-height: 1.5; }
+.composerCard textarea::placeholder { color: var(--dsw-alias-label-tertiary); }
+.composerToolbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.modelButton { display: inline-flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; border: 0; border-radius: 8px; padding: 7px 9px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font: inherit; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.modelButton:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.submitButton { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border: 0; border-radius: 50%; background: var(--dsw-alias-interactive-primary); color: var(--dsw-alias-label-reverse); cursor: pointer; }
+.submitButton:disabled { cursor: default; opacity: .45; }
+.modelMenu { position: absolute; right: 52px; bottom: calc(100% + 10px); display: grid; width: min(360px, calc(100vw - 64px)); gap: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px; padding: 14px; background: var(--dsw-alias-bg-base); box-shadow: var(--dsw-shadow-lv2); }
+.modelMenu label { display: grid; gap: 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.modelMenu select { width: 100%; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 8px 10px; outline: 0; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; }
+
+@media (max-width: 720px) {
+  .header { padding-right: 12px; padding-left: 14px; }
+  .mode { display: none; }
+  .historyInner { padding-top: 24px; }
+  .composerArea { padding-right: 10px; padding-left: 10px; }
+}

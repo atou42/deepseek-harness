@@ -1,7 +1,8 @@
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  RemoteConversationAbortResult, RemoteConversationSubmission, RemoteConversationTarget, RemoteConversationView,
+  RemoteConversationAbortResult, RemoteConversationModelCatalog, RemoteConversationSelection,
+  RemoteConversationSubmission, RemoteConversationTarget, RemoteConversationView,
   RemoteDirectoryListing, RemoteResourceId, RemoteRootSource, RemoteRootSourceId,
   RemoteRootSourceSnapshot, RemoteRootsSnapshot, RemoteTextFile, RemoteTextWriteResult,
 } from '../types.ts'
@@ -147,6 +148,56 @@ function validateSubmission(value: unknown, request: {
     session: conversation.session,
     turn: conversation.turns[0],
   })
+}
+
+function validateModelCatalog(value: unknown): RemoteConversationModelCatalog {
+  const catalog = record(value, 'conversation model catalog')
+  if (!Array.isArray(catalog.groups)) throw new TypeError('remote-roots: conversation model catalog groups must be an array')
+  const groupIds = new Set<string>()
+  const routeIds = new Set<string>()
+  const groups = catalog.groups.map((rawGroup, groupIndex) => {
+    const group = record(rawGroup, `conversation model group ${String(groupIndex)}`)
+    const id = nonBlank(group.id, `conversation model group ${String(groupIndex)} id`)
+    if (groupIds.has(id)) throw new TypeError(`remote-roots: duplicate conversation model group "${id}"`)
+    groupIds.add(id)
+    if (!Array.isArray(group.models)) throw new TypeError(`remote-roots: conversation model group "${id}" models must be an array`)
+    const models = group.models.map((rawModel, modelIndex) => {
+      const model = record(rawModel, `conversation model group "${id}" model ${String(modelIndex)}`)
+      const provider = nonBlank(model.provider, `conversation model group "${id}" model ${String(modelIndex)} provider`)
+      const modelId = nonBlank(model.id, `conversation model group "${id}" model ${String(modelIndex)} id`)
+      const routeId = `${provider}\0${modelId}`
+      if (routeIds.has(routeId)) throw new TypeError(`remote-roots: duplicate conversation model route "${provider}/${modelId}"`)
+      routeIds.add(routeId)
+      const description = model.description === undefined
+        ? undefined
+        : nonBlank(model.description, `conversation model "${provider}/${modelId}" description`)
+      return Object.freeze({
+        provider, id: modelId,
+        name: nonBlank(model.name, `conversation model "${provider}/${modelId}" name`),
+        ...description === undefined ? {} : { description },
+      })
+    })
+    return Object.freeze({
+      id,
+      name: nonBlank(group.name, `conversation model group "${id}" name`),
+      models: Object.freeze(models),
+    })
+  })
+  return Object.freeze({ groups: Object.freeze(groups) })
+}
+
+const THINKING_LEVELS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+function validateSelection(value: RemoteConversationSelection | undefined): void {
+  if (value === undefined) return
+  const hasProvider = value.provider !== undefined
+  const hasModel = value.model !== undefined
+  if (hasProvider !== hasModel) throw new TypeError('remote-roots: conversation selection provider and model must be supplied together')
+  if (value.provider !== undefined) nonBlank(value.provider, 'conversation selection provider')
+  if (value.model !== undefined) nonBlank(value.model, 'conversation selection model')
+  if (value.thinkingLevel !== undefined && !THINKING_LEVELS.has(value.thinkingLevel)) {
+    throw new TypeError('remote-roots: conversation selection thinkingLevel is invalid')
+  }
 }
 
 function validateAbortResult(value: unknown, request: {
@@ -412,17 +463,32 @@ export class RemoteRootsService extends Service implements RemoteRootsServiceCon
     return validateConversation(await source.readConversation(request), request)
   }
 
+  async listConversationModels(sourceId: RemoteRootSourceId, request: {
+    readonly rootId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationModelCatalog> {
+    nonBlank(request.rootId, 'conversation model request rootId')
+    const source = this.requireSource(sourceId)
+    const root = this.requireRoot(sourceId, request.rootId)
+    if (root.capabilities.conversation !== 'interactive' || source.listConversationModels === undefined) {
+      throw new Error(`remote-roots: source "${sourceId}" has no model catalog for root "${request.rootId}"`)
+    }
+    return validateModelCatalog(await source.listConversationModels(request))
+  }
+
   async sendConversationMessage(sourceId: RemoteRootSourceId, request: {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
     readonly content: string
     readonly clientMessageId: string
+    readonly selection?: RemoteConversationSelection
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationSubmission> {
     nonBlank(request.rootId, 'conversation message rootId')
     if (request.sessionId !== undefined) nonBlank(request.sessionId, 'conversation message sessionId')
     nonBlank(request.content, 'conversation message content')
     nonBlank(request.clientMessageId, 'conversation message clientMessageId')
+    validateSelection(request.selection)
     const source = this.requireSource(sourceId)
     const root = this.requireRoot(sourceId, request.rootId)
     if (root.capabilities.conversation !== 'interactive' || source.sendConversationMessage === undefined) {

@@ -33,7 +33,7 @@ export type {
 } from '@deepseek-ai/dsh-cohub-board/types'
 export type {
   CohubAbortTurnResult, CohubConversationView, CohubDshSessionBinding, CohubDshSessionStart,
-  CohubPromptSubmission, CohubSessionView,
+  CohubModelCatalog, CohubModelView, CohubPromptSelection, CohubPromptSubmission, CohubSessionView, CohubThinkingLevel,
   CohubSpaceDirectory, CohubSpaceEntry, CohubSpaceSessionList, CohubSpaceTextFile,
   CohubSpaceView, CohubSpaceWriteResult, CohubTurnView,
 } from '@deepseek-ai/dsh-cohub-spaces/types'

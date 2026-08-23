@@ -20,15 +20,16 @@ async function bench() {
   const openConversation = vi.fn()
   const deactivate = vi.fn()
   const readConversation = vi.fn()
+  const listConversationModels = vi.fn()
   const sendConversationMessage = vi.fn()
   const abortConversationTurn = vi.fn()
   ctx.provide('remoteRoots', {
-    snapshot, list, openConversation, deactivate, readConversation,
+    snapshot, list, openConversation, deactivate, readConversation, listConversationModels,
     sendConversationMessage, abortConversationTurn,
   } as never)
   return {
     ctx, slots, locale, snapshot, list, openConversation, deactivate,
-    readConversation, sendConversationMessage, abortConversationTurn,
+    readConversation, listConversationModels, sendConversationMessage, abortConversationTurn,
   }
 }
 
@@ -37,7 +38,7 @@ function declare(slots: SlotRegistry): () => void {
     name: 'root',
     children: {
       'sidebar.workspaces.remoteRoots': { kind: 'single', scope: 'root' },
-      'shell.overlay': { kind: 'list', scope: 'root' },
+      'conversation.remote': { kind: 'single', scope: 'root' },
     },
   } as never, () => null)
 }
@@ -66,14 +67,14 @@ describe('ui-remote-roots apply', () => {
     })
     await injected.openConversation('fixture.remote' as never, 'root' as never, 'session' as never, 'Session')
     expect(before.openConversation).toHaveBeenCalledWith('fixture.remote', 'root', 'session', 'Session')
-    const overlayEntry = before.slots.entries('shell.overlay')[0]!
+    const overlayEntry = before.slots.entries('conversation.remote')[0]!
     expect(overlayEntry.component).toBe(RemoteConversationOverlay)
     const overlay = (overlayEntry.inject as unknown as () => RemoteConversationOverlayInjected)()
     overlay.deactivate()
     expect(before.deactivate).toHaveBeenCalled()
     await first.dispose()
     expect(before.slots.entries('sidebar.workspaces.remoteRoots')).toHaveLength(0)
-    expect(before.slots.entries('shell.overlay')).toHaveLength(0)
+    expect(before.slots.entries('conversation.remote')).toHaveLength(0)
 
     const after = await bench()
     const second = after.ctx.plugin({ inject: [...inject], apply })

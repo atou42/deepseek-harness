@@ -80,6 +80,7 @@ describe('CohubSpacesGateway', () => {
     expect(spaces.typertRemote).toMatchObject({ serviceKey: 'cohubSpaces', namespace: 'cohubSpaces' })
     expect(remoteMethods(spaces)).toEqual([
       { method: 'listSpaces', invocation: { kind: 'direct' } },
+      { method: 'listModels', invocation: { kind: 'direct' } },
       { method: 'listSessions', invocation: { kind: 'direct' } },
       { method: 'getConversation', invocation: { kind: 'direct' } },
       { method: 'sendPrompt', invocation: { kind: 'direct' } },
@@ -299,10 +300,18 @@ describe('CohubSpacesGateway', () => {
     vi.stubGlobal('fetch', fetchMock)
     const { spaces } = await boot()
     const native = spaces as unknown as {
-      sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<unknown>
+      sendPrompt(
+        spaceId: string,
+        sessionId: string | null,
+        content: string,
+        clientMessageId: string,
+        selection?: { provider?: string; model?: string; thinkingLevel?: string },
+      ): Promise<unknown>
     }
 
-    await expect(native.sendPrompt('space-1', null, 'Ship the native mode', 'message-1')).resolves.toEqual({
+    await expect(native.sendPrompt('space-1', null, 'Ship the native mode', 'message-1', {
+      provider: 'deepseek', model: 'deepseek-v4-pro', thinkingLevel: 'high',
+    })).resolves.toEqual({
       spaceId: 'space-1',
       session: {
         id: 'session-1', spaceId: 'space-1', title: '', status: 'active',
@@ -319,7 +328,28 @@ describe('CohubSpacesGateway', () => {
     expect(JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)).toEqual({
       content: [{ type: 'text', text: 'Ship the native mode' }],
       clientMessageId: 'message-1',
+      provider: 'deepseek',
+      model: 'deepseek-v4-pro',
+      thinkingLevel: 'high',
       accessMode: 'full_access',
+    })
+  })
+
+  it('lists the Cohub model catalog for the native composer', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({
+      deepseek: [{
+        provider: 'deepseek', id: 'deepseek-v4-flash',
+        model: { name: 'DeepSeek V4 Flash', description: 'Fast model' },
+      }],
+    })))
+    const { spaces } = await boot()
+
+    await expect((spaces as unknown as { listModels(): Promise<unknown> }).listModels()).resolves.toEqual({
+      groups: [{
+        id: 'deepseek', name: 'deepseek', models: [{
+          provider: 'deepseek', id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', description: 'Fast model',
+        }],
+      }],
     })
   })
 

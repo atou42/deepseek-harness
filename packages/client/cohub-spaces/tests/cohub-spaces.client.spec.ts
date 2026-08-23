@@ -20,6 +20,7 @@ function remote(overrides: Partial<CohubSpacesRemoteApi> = {}): CohubSpacesRemot
     listSpaces: vi.fn(async () => []),
     listSessions: vi.fn(async (spaceId: string) => ({ spaceId, sessions: [] })),
     getConversation: vi.fn(async () => { throw new Error('no Session selected') }),
+    listModels: vi.fn(async () => ({ groups: [] })),
     sendPrompt: vi.fn(async () => { throw new Error('no prompt expected') }),
     abortTurn: vi.fn(async () => { throw new Error('no abort expected') }),
     ...overrides,
@@ -215,6 +216,7 @@ describe('CohubSpacesRemoteRootSource', () => {
         sessionId?: RemoteResourceId
         content: string
         clientMessageId: string
+        selection?: { provider?: string; model?: string; thinkingLevel?: string }
       }): Promise<unknown>
       abortConversationTurn(request: {
         rootId: RemoteResourceId
@@ -226,13 +228,16 @@ describe('CohubSpacesRemoteRootSource', () => {
 
     const submission = await native.sendConversationMessage({
       rootId, content: 'hello', clientMessageId: 'message-1',
+      selection: { provider: 'deepseek', model: 'deepseek-v4-pro', thinkingLevel: 'high' },
     }) as { session: { id: RemoteResourceId }; turn: { id: RemoteResourceId } }
     expect(submission).toMatchObject({
       rootId,
       session: { id: JSON.stringify(['space-1', 'session-1']), title: 'Native chat' },
       turn: { id: JSON.stringify(['space-1', 'session-1', 'turn-1']), status: 'queued', userText: 'hello' },
     })
-    expect(sendPrompt).toHaveBeenCalledWith('space-1', null, 'hello', 'message-1')
+    expect(sendPrompt).toHaveBeenCalledWith('space-1', null, 'hello', 'message-1', {
+      provider: 'deepseek', model: 'deepseek-v4-pro', thinkingLevel: 'high',
+    })
 
     await expect(native.abortConversationTurn({
       rootId,

@@ -6,6 +6,33 @@ export interface CohubSpaceView {
   readonly title: string
 }
 
+/** Thinking strengths accepted by native Cohub Agent prompts. */
+export type CohubThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** One text-model route advertised by Cohub. */
+export interface CohubModelView {
+  readonly provider: string
+  readonly id: string
+  readonly name: string
+  readonly description?: string
+}
+
+/** Provider-grouped text-model catalog used by the native composer. */
+export interface CohubModelCatalog {
+  readonly groups: readonly {
+    readonly id: string
+    readonly name: string
+    readonly models: readonly CohubModelView[]
+  }[]
+}
+
+/** Optional per-Turn native Cohub Agent model override. */
+export interface CohubPromptSelection {
+  readonly provider?: string
+  readonly model?: string
+  readonly thinkingLevel?: CohubThinkingLevel
+}
+
 /** One Cohub conversation shown beneath its owning Space. */
 export interface CohubSessionView {
   readonly id: string

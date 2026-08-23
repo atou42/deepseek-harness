@@ -97,6 +97,7 @@ describe('remote roots through the assembled Workspace browser', () => {
         accessTokenExpiresAt: Date.now() + 60_000,
       })),
       listSpaces: vi.fn(async () => [{ id: 'space-1', title: 'deepseek harness' }]),
+      listModels: vi.fn(async () => ({ groups: [] })),
       listSessions: vi.fn(async () => ({
         spaceId: 'space-1',
         sessions: [{

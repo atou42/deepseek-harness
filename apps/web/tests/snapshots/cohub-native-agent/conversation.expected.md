@@ -1,15 +1,14 @@
-- dialog "Cohub conversation":
-  - button "Close Cohub conversation"
-  - heading "Native Space" [level=2]
-  - paragraph: Cohub Agent · Cloud
-  - paragraph: Native cloud Session
+- main "Cohub conversation":
+  - heading "Native cloud Session" [level=2]
+  - text: Cohub Agent · Cloud
   - button "Close Cohub conversation":
     - img
-  - main:
-    - article:
-      - text: Run in cloud
-      - paragraph: This answer is persisted by Cohub.
+  - text: Chat
+  - article:
+    - text: Run in cloud
+    - paragraph: This answer is persisted by Cohub.
   - textbox "Send to Cohub Agent":
     - /placeholder: Message Cohub Agent
+  - 'button "Choose Cohub model: DeepSeek V4 Pro"': DeepSeek V4 Pro
   - button "Send" [disabled]:
     - img

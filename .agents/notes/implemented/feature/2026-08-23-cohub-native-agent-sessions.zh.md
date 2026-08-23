@@ -4,7 +4,7 @@
 
 [English](2026-08-23-cohub-native-agent-sessions.md) | 中文
 
-本 Note 中云端／本地双条目的呈现方式已由 [Cohub 云端选择与本地 @Space 引用](2026-08-23-cohub-space-at-references.zh.md) 取代。原生 Cohub Session 的归属不变。
+本 Note 中云端／本地双条目的呈现方式已由 [Cohub 云端选择与本地 @Space 引用](2026-08-23-cohub-space-at-references.zh.md) 取代，抽屉形态已由[原生 Cohub 会话界面](2026-08-23-cohub-native-conversation-surface.zh.md)取代。原生 Cohub Session 的归属不变。
 
 ## 问题
 

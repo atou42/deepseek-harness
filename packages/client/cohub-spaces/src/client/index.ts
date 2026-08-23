@@ -3,10 +3,14 @@
 import type { ClientContext, ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   CohubAbortTurnResult, CohubAccountSnapshot, CohubConversationView, CohubPromptSubmission,
+  CohubModelCatalog,
+  CohubPromptSelection,
   CohubSpaceSessionList,
   CohubSpaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
+  RemoteConversationModelCatalog,
+  RemoteConversationSelection,
   RemoteConversationView, RemoteDirectoryListing,
   RemoteResourceId,
   RemoteRootSource,
@@ -26,9 +30,16 @@ export const COHUB_SPACES_SOURCE_ID = 'cohub.spaces' as RemoteRootSourceId
 export interface CohubSpacesRemoteApi {
   getAccount(): Promise<CohubAccountSnapshot>
   listSpaces(): Promise<readonly CohubSpaceView[]>
+  listModels(): Promise<CohubModelCatalog>
   listSessions(spaceId: string): Promise<CohubSpaceSessionList>
   getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView>
-  sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission>
+  sendPrompt(
+    spaceId: string,
+    sessionId: string | null,
+    content: string,
+    clientMessageId: string,
+    selection?: CohubPromptSelection,
+  ): Promise<CohubPromptSubmission>
   abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<CohubAbortTurnResult>
 }
 
@@ -310,16 +321,37 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     })
   }
 
+  async listConversationModels(request: {
+    readonly rootId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationModelCatalog> {
+    const value = await abortable(this.remote.listModels(), request.signal)
+    return Object.freeze({
+      groups: Object.freeze(value.groups.map(group => Object.freeze({
+        id: group.id,
+        name: group.name,
+        models: Object.freeze(group.models.map(model => Object.freeze({ ...model }))),
+      }))),
+    })
+  }
+
   async sendConversationMessage(request: {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
     readonly content: string
     readonly clientMessageId: string
+    readonly selection?: RemoteConversationSelection
     readonly signal?: AbortSignal
   }) {
     const rawSessionId = request.sessionId === undefined ? null : sessionId(request.rootId, request.sessionId)
     const value = await abortable(
-      this.remote.sendPrompt(request.rootId, rawSessionId, request.content, request.clientMessageId),
+      this.remote.sendPrompt(
+        request.rootId,
+        rawSessionId,
+        request.content,
+        request.clientMessageId,
+        request.selection,
+      ),
       request.signal,
     )
     if (value.spaceId !== request.rootId || (rawSessionId !== null && value.session.id !== rawSessionId)) {
@@ -394,11 +426,13 @@ export const inject = ['remote', 'remote.cohubAccount', 'remote.cohubSpaces', 'r
 /** Register the Cohub source and refresh it whenever the Host account changes. */
 export function apply(ctx: ClientContext): () => void {
   const carrier = ctx.remote.cohubSpaces as typeof ctx.remote.cohubSpaces & {
+    listModels(): Promise<RemoteAnswer<CohubModelCatalog>>
     sendPrompt(
       spaceId: string,
       sessionId: string | null,
       content: string,
       clientMessageId: string,
+      selection?: CohubPromptSelection,
     ): Promise<RemoteAnswer<CohubPromptSubmission>>
     abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<RemoteAnswer<CohubAbortTurnResult>>
   }
@@ -406,12 +440,16 @@ export function apply(ctx: ClientContext): () => void {
   const source = new CohubSpacesRemoteRootSource({
     getAccount: async () => unwrapRemote('cohubAccount.getAccount', await accountCarrier.getAccount()),
     listSpaces: async () => unwrapRemote('cohubSpaces.listSpaces', await carrier.listSpaces()),
+    listModels: async () => unwrapRemote('cohubSpaces.listModels', await carrier.listModels()),
     listSessions: async spaceId =>
       unwrapRemote('cohubSpaces.listSessions', await carrier.listSessions(spaceId)),
     getConversation: async (spaceId, sessionId) =>
       unwrapRemote('cohubSpaces.getConversation', await carrier.getConversation(spaceId, sessionId)),
-    sendPrompt: async (spaceId, sessionId, content, clientMessageId) =>
-      unwrapRemote('cohubSpaces.sendPrompt', await carrier.sendPrompt(spaceId, sessionId, content, clientMessageId)),
+    sendPrompt: async (spaceId, sessionId, content, clientMessageId, selection) =>
+      unwrapRemote(
+        'cohubSpaces.sendPrompt',
+        await carrier.sendPrompt(spaceId, sessionId, content, clientMessageId, selection),
+      ),
     abortTurn: async (spaceId, sessionId, turnId) =>
       unwrapRemote('cohubSpaces.abortTurn', await carrier.abortTurn(spaceId, sessionId, turnId)),
   })

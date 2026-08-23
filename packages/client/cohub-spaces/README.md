@@ -8,7 +8,7 @@ Loading, account-change refresh, stale completion fencing, Session-list aborts, 
 
 ## Model Experience
 
-None, as this browser package does not change the selected model or execution owner; an `@Cohub Space` reference only serializes the selected Space title and id into that local prompt.
+Native Cohub conversations expose Cohub's current model catalog and forward the user's optional model and thinking-effort choice per Turn. Cohub remains the execution owner. An `@Cohub Space` reference in a local DSH Session still only serializes the selected Space title and id and does not change that local Session's model.
 
 #### KV Cache effect
 

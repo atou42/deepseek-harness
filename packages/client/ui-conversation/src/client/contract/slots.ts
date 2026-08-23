@@ -60,6 +60,12 @@ export type RenderMessageImages = (owner: Omit<MessageImagesOwnerProps, 'loadIma
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /**
+     * Root-scoped conversation surface takeover. Remote providers use this
+     * seat to replace the local session body without leaving the native DSH
+     * conversation column or opening a modal drawer.
+     */
+    'conversation.remote': { kind: 'single'; scope: 'root' }
+    /**
      * The entire body of one session: taking this seat means rendering that
      * session's conversation yourself. The occupant also owns the per-session
      * draft mirror and the active view ring, so a replacement inherits both
@@ -638,6 +644,7 @@ export interface HeroBrandMarkOwnerProps {
  */
 export type ConversationSlotProps =
   PropsRuntime<'conversation'> & PropsRenderSlots<
+    | 'conversation.remote'
     | 'conversation.session' | 'conversation.session.header'
     | 'conversation.composer' | 'conversation.composer.bar'
     | 'conversation.input.overlay'

@@ -1,6 +1,7 @@
 import type { PropsLocale, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  RemoteConversationAbortResult, RemoteConversationSubmission, RemoteConversationView, RemoteDirectoryListing,
+  RemoteConversationAbortResult, RemoteConversationModelCatalog, RemoteConversationSelection,
+  RemoteConversationSubmission, RemoteConversationView, RemoteDirectoryListing,
   RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 
@@ -34,11 +35,16 @@ export interface RemoteConversationOverlayInjected {
     readonly sessionId?: RemoteResourceId
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationView>
+  listConversationModels(sourceId: RemoteRootSourceId, request: {
+    readonly rootId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationModelCatalog>
   sendConversationMessage(sourceId: RemoteRootSourceId, request: {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
     readonly content: string
     readonly clientMessageId: string
+    readonly selection?: RemoteConversationSelection
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationSubmission>
   abortConversationTurn(sourceId: RemoteRootSourceId, request: {

@@ -65,6 +65,15 @@ describe('web e2e: native Cohub Agent Sessions', () => {
       json(response, [{ id: 'space-1', title: 'Native Space' }])
       return
     }
+    if (request.method === 'GET' && url.pathname === '/api/models') {
+      json(response, {
+        deepseek: [
+          { provider: 'deepseek', id: 'deepseek-v4-flash', model: { name: 'DeepSeek V4 Flash' } },
+          { provider: 'deepseek', id: 'deepseek-v4-pro', model: { name: 'DeepSeek V4 Pro' } },
+        ],
+      })
+      return
+    }
     if (request.method === 'GET' && url.pathname === '/api/spaces/space-1/sessions') {
       json(response, { sessions: [session], pageInfo: { hasMore: false, nextCursor: null } })
       return
@@ -143,18 +152,24 @@ describe('web e2e: native Cohub Agent Sessions', () => {
     expect(picker).not.toContain('DSH Agent')
 
     await page.getByRole('menuitem', { name: 'Native Space · Cohub' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Cohub conversation' })
-    await dialog.waitFor({ timeout: 15_000 })
-    await dialog.getByRole('textbox', { name: 'Send to Cohub Agent' }).fill('Run in cloud')
-    await dialog.getByRole('button', { name: 'Send' }).click()
-    await dialog.getByText('This answer is persisted by Cohub.').waitFor({ timeout: 15_000 })
-    const conversation = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
+    const conversationSurface = page.getByRole('main', { name: 'Cohub conversation' })
+    await conversationSurface.waitFor({ timeout: 15_000 })
+    await conversationSurface.getByRole('button', { name: /Choose Cohub model/ }).click()
+    await conversationSurface.getByLabel('Model', { exact: true }).selectOption({ label: 'DeepSeek V4 Pro' })
+    await conversationSurface.getByLabel('Thinking effort', { exact: true }).selectOption('high')
+    await conversationSurface.getByRole('textbox', { name: 'Send to Cohub Agent' }).fill('Run in cloud')
+    await conversationSurface.getByRole('button', { name: 'Send' }).click()
+    await conversationSurface.getByText('This answer is persisted by Cohub.').waitFor({ timeout: 15_000 })
+    const conversation = await captureStableAria(page, 'main[aria-label="Cohub conversation"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(CONVERSATION_EXPECTED, conversation, MODE)
     expect(conversation).toContain('Cohub Agent · Cloud')
     expect(promptRequests).toHaveLength(1)
     expect(promptRequests[0]).toMatchObject({
       content: [{ type: 'text', text: 'Run in cloud' }],
       clientMessageId: expect.any(String) as string,
+      provider: 'deepseek',
+      model: 'deepseek-v4-pro',
+      thinkingLevel: 'high',
       accessMode: 'full_access',
     })
     expect(authorizationHeaders.filter(Boolean)).toEqual(

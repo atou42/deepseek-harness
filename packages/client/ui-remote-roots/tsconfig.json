@@ -8,7 +8,7 @@
     { "path": "../remote-roots" },
     { "path": "../runtime" },
     { "path": "../ui-primitives" },
-    { "path": "../ui-layout" },
+    { "path": "../ui-conversation" },
     { "path": "../ui-slots" },
     { "path": "../ui-workspace" },
     { "path": "../../runtime-diagnostics/invariants" }
