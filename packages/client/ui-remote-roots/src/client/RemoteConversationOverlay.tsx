@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  IconCloseOutline16, IconSendOutline16, IconStopFill16, MarkdownText,
+  DisclosureRow, IconApiOutline14, IconCloseOutline16, IconSendOutline16, IconStopFill16,
+  IconThinkOutline14, MarkdownText, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  RemoteConversationModelCatalog, RemoteConversationSelection, RemoteConversationThinkingLevel,
+  RemoteConversationBlock, RemoteConversationModelCatalog, RemoteConversationSelection,
+  RemoteConversationThinkingLevel,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 import type { RemoteConversationOverlayProps } from './contract.ts'
 import css from './RemoteConversationOverlay.module.css'
@@ -36,6 +38,137 @@ function selectedModelValue(selection: RemoteConversationSelection): string {
     : `${selection.provider}\0${selection.model}`
 }
 
+function firstLine(text: string): string {
+  return text.split('\n', 1)[0] ?? ''
+}
+
+function latestLine(text: string): string {
+  const visible = text.trimEnd()
+  const newline = visible.lastIndexOf('\n')
+  return newline === -1 ? visible : visible.slice(newline + 1)
+}
+
+function blockText(content: string | readonly RemoteConversationBlock[]): string {
+  if (typeof content === 'string') return content
+  return content.map((block) => {
+    if (block.kind === 'text' || block.kind === 'thinking' || block.kind === 'system-note') return block.text
+    if (block.kind === 'shell-command') return block.rawText
+    if (block.kind === 'tool-use') return `${block.name} ${JSON.stringify(block.input)}`
+    if (block.kind === 'tool-result') return blockText(block.content)
+    return block.source.kind === 'url' ? block.source.url : `[${block.source.mediaType}]`
+  }).join('\n')
+}
+
+function ThinkingBlock({ text, running }: { readonly text: string; readonly running: boolean }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={css.flowRow} data-state={running ? 'running' : 'ok'}>
+      <DisclosureRow
+        rowClassName={css.flowHeader}
+        titleClassName={css.flowTitle}
+        chevronClassName={css.flowChevron}
+        icon={<IconThinkOutline14 size={14} />}
+        title="Think"
+        open={open}
+        expandable
+        expandOnRowClick
+        onToggle={() => { setOpen(value => !value) }}
+        collapsedContent={(
+          <>
+            <span className={css.flowSeparator} aria-hidden />
+            <span className={css.flowSummary}>{running ? latestLine(text) : firstLine(text)}</span>
+          </>
+        )}
+      >
+        <div className={css.thinkingBody}>{text}</div>
+      </DisclosureRow>
+    </div>
+  )
+}
+
+function ToolBlock({
+  block, result, running, runningLabel,
+}: {
+  readonly block: Extract<RemoteConversationBlock, { readonly kind: 'tool-use' | 'shell-command' }>
+  readonly result?: Extract<RemoteConversationBlock, { readonly kind: 'tool-result' }>
+  readonly running: boolean
+  readonly runningLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+  const title = block.kind === 'tool-use' ? block.name : block.command
+  const input = block.kind === 'tool-use' ? JSON.stringify(block.input, null, 2) : block.rawText
+  const resultText = result === undefined ? undefined : blockText(result.content)
+  const failed = result?.isError === true
+  const summary = resultText === undefined ? runningLabel : firstLine(resultText)
+  const body = [input, resultText].filter(value => value !== undefined && value.length > 0).join('\n\n')
+  return (
+    <div className={css.flowRow} data-state={failed ? 'error' : running ? 'running' : 'ok'}>
+      <DisclosureRow
+        rowClassName={css.flowHeader}
+        titleClassName={css.flowTitle}
+        chevronClassName={css.flowChevron}
+        icon={failed ? <StateDot state="error" /> : <IconApiOutline14 size={14} />}
+        title={title}
+        open={open}
+        expandable={body.length > 0}
+        expandOnRowClick
+        keepContentWhenOpen
+        onToggle={() => { setOpen(value => !value) }}
+        collapsedContent={(
+          <>
+            <span className={css.flowSeparator} aria-hidden />
+            <span className={css.flowSummary} data-error={failed || undefined}>{summary}</span>
+          </>
+        )}
+      >
+        <pre className={css.toolBody} data-error={failed || undefined}>{body}</pre>
+      </DisclosureRow>
+    </div>
+  )
+}
+
+function TurnBlocks({ blocks, running, runningLabel }: {
+  readonly blocks: readonly RemoteConversationBlock[]
+  readonly running: boolean
+  readonly runningLabel: string
+}) {
+  const rendered = []
+  const settledToolIds = new Set(blocks.filter(block => block.kind === 'tool-result').map(block => block.toolUseId))
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index]
+    if (block === undefined || block.kind === 'tool-result') continue
+    const last = index === blocks.length - 1
+    if (block.kind === 'text') {
+      rendered.push(<div key={index} className={css.assistant}><MarkdownText text={block.text} streaming={running && last} /></div>)
+    } else if (block.kind === 'thinking') {
+      rendered.push(<ThinkingBlock key={index} text={block.text} running={running && last} />)
+    } else if (block.kind === 'tool-use') {
+      const result = blocks.find((candidate): candidate is Extract<RemoteConversationBlock, { readonly kind: 'tool-result' }> => (
+        candidate.kind === 'tool-result' && candidate.toolUseId === block.id
+      ))
+      rendered.push(
+        <ToolBlock
+          key={index}
+          block={block}
+          {...result === undefined ? {} : { result }}
+          running={running && !settledToolIds.has(block.id)}
+          runningLabel={runningLabel}
+        />,
+      )
+    } else if (block.kind === 'shell-command') {
+      rendered.push(<ToolBlock key={index} block={block} running={running && last} runningLabel={runningLabel} />)
+    } else if (block.kind === 'image') {
+      const src = block.source.kind === 'url'
+        ? block.source.url
+        : `data:${block.source.mediaType};base64,${block.source.data}`
+      rendered.push(<img key={index} className={css.outputImage} src={src} alt="Cohub output" />)
+    } else {
+      rendered.push(<div key={index} className={css.systemNote}>{block.text}</div>)
+    }
+  }
+  return <>{rendered}</>
+}
+
 /** Render the selected provider conversation as the native DSH center surface. */
 export function RemoteConversationOverlay({
   useRemoteRoots, deactivate, readConversation, listConversationModels,
@@ -51,6 +184,8 @@ export function RemoteConversationOverlay({
   const [action, setAction] = useState<'idle' | 'sending' | 'stopping'>('idle')
   const [actionError, setActionError] = useState<string>()
   const [refreshRevision, setRefreshRevision] = useState(0)
+  const historyRef = useRef<HTMLDivElement>(null)
+  const followTailRef = useRef(true)
 
   const activeKey = active === undefined ? '' : `${active.sourceId}\0${active.rootId}\0${active.sessionId ?? ''}`
   const modelScopeKey = active === undefined ? '' : `${active.sourceId}\0${active.rootId}`
@@ -123,6 +258,11 @@ export function RemoteConversationOverlay({
       .flatMap(group => group.models)
       .find(model => model.provider === selection.provider && model.id === selection.model)?.name
   }, [models, selection])
+
+  useEffect(() => {
+    const history = historyRef.current
+    if (history !== null && followTailRef.current) history.scrollTop = history.scrollHeight
+  }, [conversation])
 
   if (active === undefined) return null
   const turns = conversation.status === 'ready' ? conversation.value.turns : []
@@ -208,7 +348,14 @@ export function RemoteConversationOverlay({
         </div>
       </header>
 
-      <div className={css.history}>
+      <div
+        ref={historyRef}
+        className={css.history}
+        onScroll={(event) => {
+          const target = event.currentTarget
+          followTailRef.current = target.scrollHeight - target.scrollTop - target.clientHeight < 80
+        }}
+      >
         <div className={css.historyInner}>
           {conversation.status === 'loading' && <p role="status">{t('conversation.loading')}</p>}
           {conversation.status === 'error' && <p className={css.error} role="alert">{t('conversation.error', { message: conversation.message })}</p>}
@@ -221,12 +368,15 @@ export function RemoteConversationOverlay({
           {conversation.status === 'ready' && conversation.value.turns.map(turn => (
             <article key={turn.id} className={css.turn} data-turn-status={turn.status}>
               {turn.userText !== undefined && <div className={css.user}>{turn.userText}</div>}
-              {turn.assistantText !== undefined && (
+              {turn.blocks !== undefined && turn.blocks.length > 0 && (
+                <TurnBlocks blocks={turn.blocks} running={!terminal(turn.status)} runningLabel={t('conversation.running')} />
+              )}
+              {(turn.blocks === undefined || turn.blocks.length === 0) && turn.assistantText !== undefined && (
                 <div className={css.assistant}>
                   <MarkdownText text={turn.assistantText} streaming={!terminal(turn.status)} />
                 </div>
               )}
-              {!terminal(turn.status) && turn.assistantText === undefined && <div className={css.running} role="status">{t('conversation.running')}</div>}
+              {!terminal(turn.status) && turn.assistantText === undefined && (turn.blocks === undefined || turn.blocks.length === 0) && <div className={css.running} role="status">{t('conversation.running')}</div>}
               {turn.errorMessage !== undefined && <div className={css.error} role="alert">{turn.errorMessage}</div>}
             </article>
           ))}

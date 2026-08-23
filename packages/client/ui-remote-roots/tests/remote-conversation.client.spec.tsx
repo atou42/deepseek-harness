@@ -15,6 +15,34 @@ const rid = (value: string) => value as RemoteResourceId
 const t = makeTranslate(zh)
 
 describe('RemoteConversationOverlay', () => {
+  it('opens after an inactive surface receives a Cohub selection', async () => {
+    const sourceId = sid('cohub')
+    const rootId = rid('space-1')
+    const snapshot = createSnapshotStore<RemoteRootsSnapshot>({ revision: 1, sources: [] })
+    const view = render(
+      <RemoteConversationOverlay
+        useRemoteRoots={bindSnapshotSelector(snapshot)}
+        listConversationModels={vi.fn(async () => ({ groups: [] }))}
+        readConversation={vi.fn()}
+        sendConversationMessage={vi.fn()}
+        abortConversationTurn={vi.fn()}
+        deactivate={vi.fn()}
+        t={t}
+      />,
+    )
+    expect(view.queryByRole('main', { name: 'Cohub 会话' })).toBeNull()
+
+    act(() => {
+      snapshot.set({
+        revision: 2,
+        sources: [],
+        active: { sourceId, rootId, rootTitle: 'deepseek harness', conversation: 'interactive' },
+      })
+    })
+
+    expect(await view.findByRole('main', { name: 'Cohub 会话' })).toBeTruthy()
+  })
+
   it('renders a selected interactive provider Session with its own composer', async () => {
     const sourceId = sid('cohub')
     const rootId = rid('space-1')
@@ -85,6 +113,71 @@ describe('RemoteConversationOverlay', () => {
       rootId, sessionId, content: '继续', clientMessageId: expect.any(String) as string,
       selection: { provider: 'deepseek', model: 'deepseek-v4-pro', thinkingLevel: 'high' },
     })
+  })
+
+  it('renders Cohub thinking and tool progress with native DSH disclosures', async () => {
+    const sourceId = sid('cohub')
+    const rootId = rid('space-1')
+    const sessionId = rid('session-1')
+    const snapshot = createSnapshotStore<RemoteRootsSnapshot>({
+      revision: 1,
+      sources: [],
+      active: { sourceId, rootId, rootTitle: 'deepseek harness', conversation: 'interactive', sessionId },
+    })
+    const conversation = {
+      rootId,
+      session: { id: sessionId, title: 'Native progress', status: 'active' },
+      turns: [{
+        id: rid('turn-1'), sequence: 1, status: 'running', userText: '检查代码',
+        blocks: [
+          { kind: 'thinking', text: '先看目录\n再定位实现' },
+          { kind: 'tool-use', id: 'tool-1', name: 'Bash', input: { command: 'git status' } },
+          { kind: 'tool-result', toolUseId: 'tool-1', content: 'clean' },
+          { kind: 'tool-use', id: 'tool-2', name: 'Failing tool', input: {} },
+          {
+            kind: 'tool-result', toolUseId: 'tool-2', isError: true, content: [
+              { kind: 'text', text: 'boom' },
+              { kind: 'thinking', text: 'nested reason' },
+              { kind: 'system-note', noteType: 'info', text: 'nested note' },
+              { kind: 'shell-command', command: 'pwd', rawText: 'pwd' },
+              { kind: 'tool-use', id: 'nested', name: 'Nested', input: {} },
+              { kind: 'tool-result', toolUseId: 'nested', content: 'nested result' },
+              { kind: 'image', source: { kind: 'url', url: 'https://example.test/nested.png' } },
+              { kind: 'image', source: { kind: 'base64', mediaType: 'image/png', data: 'YWJj' } },
+            ],
+          },
+          { kind: 'shell-command', command: 'pwd', rawText: 'pwd' },
+          { kind: 'system-note', noteType: 'info', text: 'Cloud Agent continued.' },
+          { kind: 'image', source: { kind: 'url', url: 'https://example.test/output.png' } },
+          { kind: 'image', source: { kind: 'base64', mediaType: 'image/png', data: 'YWJj' } },
+          { kind: 'text', text: '正在处理。' },
+        ],
+        updatedAt: '2026-08-23T12:00:00.000Z',
+      }],
+    } as unknown as RemoteConversationView
+    const view = render(
+      <RemoteConversationOverlay
+        useRemoteRoots={bindSnapshotSelector(snapshot)}
+        listConversationModels={vi.fn(async () => ({ groups: [] }))}
+        readConversation={vi.fn(async () => conversation)}
+        sendConversationMessage={vi.fn()}
+        abortConversationTurn={vi.fn()}
+        deactivate={vi.fn()}
+        t={t}
+      />,
+    )
+
+    const think = await view.findByRole('button', { name: /Think/ })
+    expect(view.getByText('先看目录')).toBeTruthy()
+    fireEvent.click(think)
+    expect(view.getByText(/先看目录\s+再定位实现/)).toBeTruthy()
+    expect(view.getByText('Bash')).toBeTruthy()
+    expect(view.getByText('clean')).toBeTruthy()
+    expect(view.getByText('Failing tool')).toBeTruthy()
+    expect(view.getByText('boom')).toBeTruthy()
+    expect(view.getByText('Cloud Agent continued.')).toBeTruthy()
+    expect(view.getAllByAltText('Cohub output')).toHaveLength(2)
+    expect(view.getByText('正在处理。')).toBeTruthy()
   })
 
   it('opens a new cloud-only Cohub Agent composer without a local DSH Session', () => {

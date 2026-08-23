@@ -1,5 +1,7 @@
 /** Client-safe wire vocabulary for the Cohub Space/files adapter. */
 
+import type { JsonValue } from '@deepseek-ai/dsh-session/types'
+
 /** One Cohub Space rendered as a remote semantic root. */
 export interface CohubSpaceView {
   readonly id: string
@@ -49,6 +51,30 @@ export interface CohubSpaceSessionList {
   readonly sessions: readonly CohubSessionView[]
 }
 
+/** One native Cohub message block kept intact for DSH-native presentation. */
+export type CohubConversationBlock =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'thinking'; readonly text: string }
+  | {
+    readonly kind: 'image'
+    readonly source:
+      | { readonly kind: 'url'; readonly url: string }
+      | { readonly kind: 'base64'; readonly mediaType: string; readonly data: string }
+  }
+  | { readonly kind: 'shell-command'; readonly command: string; readonly rawText: string }
+  | { readonly kind: 'tool-use'; readonly id: string; readonly name: string; readonly input: Readonly<Record<string, JsonValue>> }
+  | {
+    readonly kind: 'tool-result'
+    readonly toolUseId: string
+    readonly content: string | readonly CohubConversationBlock[]
+    readonly isError?: boolean
+  }
+  | {
+    readonly kind: 'system-note'
+    readonly noteType: 'session_created' | 'forked' | 'compacted' | 'info'
+    readonly text: string
+  }
+
 /** One Cohub Turn projected into the provider-neutral conversation view. */
 export interface CohubTurnView {
   readonly id: string
@@ -57,6 +83,7 @@ export interface CohubTurnView {
   readonly status: string
   readonly userText?: string
   readonly assistantText?: string
+  readonly blocks?: readonly CohubConversationBlock[]
   readonly errorMessage?: string
   readonly createdAt: string
   readonly updatedAt: string

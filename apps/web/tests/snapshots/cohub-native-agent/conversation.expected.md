@@ -6,6 +6,14 @@
   - text: Chat
   - article:
     - text: Run in cloud
+    - button "Think Inspecting the cloud workspace.":
+      - img
+      - img
+      - text: Think Inspecting the cloud workspace.
+    - button "Bash /workspace":
+      - img
+      - img
+      - text: Bash /workspace
     - paragraph: This answer is persisted by Cohub.
   - textbox "Send to Cohub Agent":
     - /placeholder: Message Cohub Agent

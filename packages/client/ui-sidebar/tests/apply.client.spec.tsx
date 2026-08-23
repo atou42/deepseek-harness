@@ -12,9 +12,11 @@ async function bench(declare = true) {
   const layout = { toggleSidebar: vi.fn() }
   const workspaces = { startSession: vi.fn() }
   const sessions = { open: vi.fn(), clear: vi.fn() }
+  const remoteRoots = { deactivate: vi.fn() }
   ctx.provide('layout', layout)
   ctx.provide('sessions', sessions as never)
   ctx.provide('workspaces', workspaces as never)
+  ctx.provide('remoteRoots', remoteRoots as never)
   ctx.provide('locale', new LocaleRuntime(ctx))
   const slots = ctx.get('slots') as SlotRegistry
   if (declare) {
@@ -23,7 +25,7 @@ async function bench(declare = true) {
       () => null,
     )
   }
-  return { ctx, slots, layout, workspaces, sessions }
+  return { ctx, slots, layout, workspaces, sessions, remoteRoots }
 }
 
 describe('ui-sidebar apply', () => {
@@ -46,8 +48,10 @@ describe('ui-sidebar apply', () => {
     expect(Object.keys(injected)).toEqual(['startSession', 'toggleSidebar'])
     // Both arms delegate to the runtime's shared New Session action.
     injected.startSession('workspace' as never)
+    expect(b.remoteRoots.deactivate).toHaveBeenCalledOnce()
     expect(b.workspaces.startSession).toHaveBeenCalledWith('workspace')
     injected.startSession()
+    expect(b.remoteRoots.deactivate).toHaveBeenCalledTimes(2)
     expect(b.workspaces.startSession).toHaveBeenLastCalledWith(undefined)
     injected.toggleSidebar()
     expect(b.layout.toggleSidebar).toHaveBeenCalledOnce()

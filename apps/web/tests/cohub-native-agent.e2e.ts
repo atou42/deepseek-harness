@@ -30,7 +30,15 @@ const queuedTurn = {
   createdAt: NOW, updatedAt: NOW,
 }
 const completedTurn = {
-  ...queuedTurn, status: 'completed', assistantText: 'This answer is persisted by Cohub.',
+  ...queuedTurn,
+  status: 'completed',
+  assistantText: 'This answer is persisted by Cohub.',
+  assistantContent: [
+    { type: 'thinking', thinking: 'Inspecting the cloud workspace.' },
+    { type: 'tool_use', id: 'tool-native', name: 'Bash', input: { command: 'pwd' } },
+    { type: 'tool_result', tool_use_id: 'tool-native', content: '/workspace' },
+    { type: 'text', text: 'This answer is persisted by Cohub.' },
+  ],
 }
 
 async function body(request: IncomingMessage): Promise<unknown> {
@@ -57,6 +65,7 @@ describe('web e2e: native Cohub Agent Sessions', () => {
   const promptRequests: unknown[] = []
   const authorizationHeaders: (string | undefined)[] = []
   const requestPaths: string[] = []
+  let turnListRequests = 0
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     requestPaths.push(url.pathname)
@@ -88,8 +97,30 @@ describe('web e2e: native Cohub Agent Sessions', () => {
       return
     }
     if (request.method === 'GET' && url.pathname === '/api/sessions/session-native/turns') {
+      turnListRequests += 1
       json(response, {
-        session, turns: [completedTurn], hasMore: false,
+        session, turns: [turnListRequests === 1 ? { ...queuedTurn, status: 'running' } : completedTurn], hasMore: false,
+      })
+      return
+    }
+    if (request.method === 'GET' && url.pathname === '/api/sessions/session-native/turns/stream-snapshot') {
+      json(response, {
+        snapshot: {
+          version: 2,
+          spaceId: 'space-1',
+          sessionId: session.id,
+          turnId: queuedTurn.id,
+          anchorUserMessageId: 'message-user',
+          seq: 2,
+          intermediateMessages: [],
+          current: {
+            messageId: 'message-assistant',
+            messageOrdinal: 2,
+            content: [{ type: 'thinking', thinking: 'Inspecting the cloud workspace.' }],
+            appendPath: '/content/0/thinking',
+          },
+          updatedAt: Date.parse(NOW),
+        },
       })
       return
     }
@@ -159,6 +190,7 @@ describe('web e2e: native Cohub Agent Sessions', () => {
     await conversationSurface.getByLabel('Thinking effort', { exact: true }).selectOption('high')
     await conversationSurface.getByRole('textbox', { name: 'Send to Cohub Agent' }).fill('Run in cloud')
     await conversationSurface.getByRole('button', { name: 'Send' }).click()
+    await conversationSurface.getByText('Inspecting the cloud workspace.').waitFor({ timeout: 15_000 })
     await conversationSurface.getByText('This answer is persisted by Cohub.').waitFor({ timeout: 15_000 })
     const conversation = await captureStableAria(page, 'main[aria-label="Cohub conversation"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(CONVERSATION_EXPECTED, conversation, MODE)
@@ -177,6 +209,12 @@ describe('web e2e: native Cohub Agent Sessions', () => {
     )
     expect(tripwire.warnings).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
+
+    await page.getByRole('button', { name: 'New session', exact: true })
+      .filter({ hasText: 'New Session' })
+      .click()
+    await vi.waitFor(async () => { expect(await conversationSurface.count()).toBe(0) })
+    await page.getByRole('textbox', { name: 'Choose workspace' }).waitFor()
   }, 60_000)
 
   it('keeps its snapshot inventory closed', async () => {

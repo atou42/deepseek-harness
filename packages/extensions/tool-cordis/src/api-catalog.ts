@@ -660,6 +660,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'The authenticated account\'s Spaces.',
       },
       {
+        signature: '@Remote(\'listModels\') listModels(): Promise<CohubModelCatalog>',
+        description: 'List the native Cohub Agent text-model catalog.',
+        parameters: [],
+        returns: 'The provider-grouped Cohub model catalog.',
+      },
+      {
         signature: '@Remote(\'listSessions\') listSessions(spaceId: string): Promise<CohubSpaceSessionList>',
         description: 'List every conversation in one Space, following the platform cursor.',
         parameters: [{ name: 'spaceId', description: 'Cohub Space identity.' }],
@@ -672,9 +678,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'The complete retained conversation view.',
       },
       {
-        signature: '@Remote(\'sendPrompt\') sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission>',
+        signature: '@Remote(\'sendPrompt\') sendPrompt( spaceId: string, sessionId: string | null, content: string, clientMessageId: string, selection?: CohubPromptSelection, ): Promise<CohubPromptSubmission>',
         description: 'Submit one prompt directly to Cohub Agent, creating a Session when sessionId is null.',
-        parameters: [{ name: 'spaceId', description: 'Cohub Space identity.' }, { name: 'sessionId', description: 'Existing Cohub Session identity, or null for a new Session.' }, { name: 'content', description: 'User-authored text.' }, { name: 'clientMessageId', description: 'Caller-generated idempotency identity.' }],
+        parameters: [{ name: 'spaceId', description: 'Cohub Space identity.' }, { name: 'sessionId', description: 'Existing Cohub Session identity, or null for a new Session.' }, { name: 'content', description: 'User-authored text.' }, { name: 'clientMessageId', description: 'Caller-generated idempotency identity.' }, { name: 'selection', description: 'Optional model and thinking-effort override for this Turn.' }],
         returns: 'The Cohub-owned Session and accepted Turn.',
       },
       {
@@ -3256,6 +3262,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CohubBoardSnapshot {\n    readonly board: CohubBoardRecord;\n    readonly nodes: readonly CohubBoardNode[];\n    readonly connections: readonly CohubBoardConnection[];\n}',
   },
   {
+    name: 'CohubConversationBlock',
+    declaration: 'export type CohubConversationBlock = {\n    readonly kind: \'text\';\n    readonly text: string;\n} | {\n    readonly kind: \'thinking\';\n    readonly text: string;\n} | {\n    readonly kind: \'image\';\n    readonly source: {\n        readonly kind: \'url\';\n        readonly url: string;\n    } | {\n        readonly kind: \'base64\';\n        readonly mediaType: string;\n        readonly data: string;\n    };\n} | {\n    readonly kind: \'shell-command\';\n    readonly command: string;\n    readonly rawText: string;\n} | {\n    readonly kind: \'tool-use\';\n    readonly id: string;\n    readonly name: string;\n    readonly input: Readonly<Record<string, JsonValue>>;\n} | {\n    readonly kind: \'tool-result\';\n    readonly toolUseId: string;\n    readonly content: string | readonly CohubConversationBlock[];\n    readonly isError?: boolean;\n} | {\n    readonly kind: \'system-note\';\n    readonly noteType: \'session_created\' | \'forked\' | \'compacted\' | \'info\';\n    readonly text: string;\n};',
+  },
+  {
     name: 'CohubConversationView',
     declaration: 'export interface CohubConversationView {\n    readonly spaceId: string;\n    readonly session: CohubSessionView;\n    readonly turns: readonly CohubTurnView[];\n}',
   },
@@ -3278,6 +3288,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CohubLogoutResult',
     declaration: 'export interface CohubLogoutResult {\n    readonly revocationWarning?: string;\n}',
+  },
+  {
+    name: 'CohubModelCatalog',
+    declaration: 'export interface CohubModelCatalog {\n    readonly groups: readonly {\n        readonly id: string;\n        readonly name: string;\n        readonly models: readonly CohubModelView[];\n    }[];\n}',
+  },
+  {
+    name: 'CohubModelView',
+    declaration: 'export interface CohubModelView {\n    readonly provider: string;\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n}',
+  },
+  {
+    name: 'CohubPromptSelection',
+    declaration: 'export interface CohubPromptSelection {\n    readonly provider?: string;\n    readonly model?: string;\n    readonly thinkingLevel?: CohubThinkingLevel;\n}',
   },
   {
     name: 'CohubPromptSubmission',
@@ -3317,7 +3339,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CohubTurnView',
-    declaration: 'export interface CohubTurnView {\n    readonly id: string;\n    readonly sessionId: string;\n    readonly sequence: number;\n    readonly status: string;\n    readonly userText?: string;\n    readonly assistantText?: string;\n    readonly errorMessage?: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface CohubTurnView {\n    readonly id: string;\n    readonly sessionId: string;\n    readonly sequence: number;\n    readonly status: string;\n    readonly userText?: string;\n    readonly assistantText?: string;\n    readonly blocks?: readonly CohubConversationBlock[];\n    readonly errorMessage?: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
   {
     name: 'CollectedOutput',

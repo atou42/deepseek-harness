@@ -258,7 +258,10 @@ describe('CohubSpacesGateway', () => {
         session: { id: 'session-1', spaceId: 'space-1', title: 'Remote chat', status: 'active', updatedAt: '2026-08-16T10:00:01.000Z' },
         turns: [{
           id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'completed',
-          userText: 'hello', assistantText: 'world', errorMessage: null,
+          userText: 'hello', assistantText: 'world', assistantContent: [
+            { type: 'thinking', thinking: 'reason' },
+            { type: 'text', text: 'world' },
+          ], errorMessage: null,
           createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
         }],
         hasMore: false,
@@ -275,13 +278,120 @@ describe('CohubSpacesGateway', () => {
       session: { id: 'session-1', spaceId: 'space-1', title: 'Remote chat', status: 'active', updatedAt: '2026-08-16T10:00:01.000Z' },
       turns: [{
         id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'completed',
-        userText: 'hello', assistantText: 'world',
+        userText: 'hello', assistantText: 'world', blocks: [
+          { kind: 'thinking', text: 'reason' },
+          { kind: 'text', text: 'world' },
+        ],
         createdAt: '2026-08-16T10:00:00.000Z', updatedAt: '2026-08-16T10:00:01.000Z',
       }],
     })
     expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
       'https://cohub.example.test/api/sessions/session-1/turns?direction=older&limit=100',
     ])
+  })
+
+  it('projects live Cohub thinking and tool activity from the stream snapshot', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({
+        session: { id: 'session-1', spaceId: 'space-1', title: 'Remote chat', status: 'active', updatedAt: '2026-08-23T10:00:01.000Z' },
+        turns: [{
+          id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'running',
+          userText: 'inspect it', assistantText: null, assistantContent: null, errorMessage: null,
+          createdAt: '2026-08-23T10:00:00.000Z', updatedAt: '2026-08-23T10:00:01.000Z',
+        }],
+        hasMore: false,
+        nextCursor: null,
+      }))
+      .mockResolvedValueOnce(json({
+        snapshot: {
+          version: 2,
+          spaceId: 'space-1',
+          sessionId: 'session-1',
+          turnId: 'turn-1',
+          anchorUserMessageId: 'message-1',
+          seq: 4,
+          intermediateMessages: [{
+            messageId: 'message-2',
+            messageOrdinal: 2,
+            content: [
+              { type: 'thinking', thinking: 'First inspect the repository.' },
+              { type: 'tool_use', id: 'tool-1', name: 'Bash', input: { command: 'git status', args: [1, true, null] } },
+              { type: 'tool_result', tool_use_id: 'tool-1', content: 'clean', is_error: false },
+              { type: 'shell_command', command: 'pwd', rawText: 'pwd' },
+              { type: 'system_note', note_type: 'info', text: 'Cloud Agent continued.' },
+              { type: 'image', source: { type: 'url', url: 'https://example.test/output.png' } },
+              { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'YWJj' } },
+            ],
+          }],
+          current: {
+            messageId: 'message-3',
+            messageOrdinal: 3,
+            content: [{ type: 'text', text: 'Working on it.' }],
+            appendPath: '/content/0/text',
+          },
+          lifecycle: { phase: 'llm_call_started', llmRound: 2, provider: 'deepseek', model: 'deepseek-v4-pro', at: '2026-08-23T10:00:01.000Z' },
+          updatedAt: 1787479201000,
+        },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces } = await boot()
+
+    await expect((spaces as unknown as {
+      getConversation(spaceId: string, sessionId: string): Promise<unknown>
+    }).getConversation('space-1', 'session-1')).resolves.toMatchObject({
+      turns: [{
+        id: 'turn-1',
+        blocks: [
+          { kind: 'thinking', text: 'First inspect the repository.' },
+          { kind: 'tool-use', id: 'tool-1', name: 'Bash', input: { command: 'git status', args: [1, true, null] } },
+          { kind: 'tool-result', toolUseId: 'tool-1', content: 'clean', isError: false },
+          { kind: 'shell-command', command: 'pwd', rawText: 'pwd' },
+          { kind: 'system-note', noteType: 'info', text: 'Cloud Agent continued.' },
+          { kind: 'image', source: { kind: 'url', url: 'https://example.test/output.png' } },
+          { kind: 'image', source: { kind: 'base64', mediaType: 'image/png', data: 'YWJj' } },
+          { kind: 'text', text: 'Working on it.' },
+        ],
+      }],
+    })
+    expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://cohub.example.test/api/sessions/session-1/turns?direction=older&limit=100',
+      'https://cohub.example.test/api/sessions/session-1/turns/stream-snapshot',
+    ])
+  })
+
+  it('accepts an empty pre-start stream snapshot before Cohub assigns a Turn', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({
+        session: { id: 'session-1', spaceId: 'space-1', title: 'Remote chat', status: 'active', updatedAt: '2026-08-23T10:00:01.000Z' },
+        turns: [{
+          id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'queued',
+          userText: 'inspect it', assistantText: null, assistantContent: null, errorMessage: null,
+          createdAt: '2026-08-23T10:00:00.000Z', updatedAt: '2026-08-23T10:00:01.000Z',
+        }],
+        hasMore: false,
+        nextCursor: null,
+      }))
+      .mockResolvedValueOnce(json({
+        snapshot: {
+          version: 2,
+          spaceId: 'space-1',
+          sessionId: 'session-1',
+          turnId: null,
+          anchorUserMessageId: null,
+          seq: 0,
+          intermediateMessages: [],
+          current: { messageId: null, messageOrdinal: null, content: [], appendPath: null },
+          updatedAt: 1787479201000,
+        },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces } = await boot()
+
+    await expect((spaces as unknown as {
+      getConversation(spaceId: string, sessionId: string): Promise<unknown>
+    }).getConversation('space-1', 'session-1')).resolves.toMatchObject({
+      turns: [{ id: 'turn-1', status: 'queued' }],
+    })
   })
 
   it('submits a native Cohub Agent Turn without assembling a DSH prompt', async () => {

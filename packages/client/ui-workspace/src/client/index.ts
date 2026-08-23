@@ -106,11 +106,18 @@ export function apply(ctx: ClientContext): void {
     if (service === undefined) throw new Error('ui-workspace: remote roots are unavailable')
     await service.openConversation(sourceId, rootId)
   }
+  const deactivateRemoteConversation = (): void => { ctx.get('remoteRoots')?.deactivate() }
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
-    startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
-    open: (sessionId) => { ctx.sessions.open(sessionId) },
+    startSession: (workspaceId) => {
+      deactivateRemoteConversation()
+      ctx.workspaces.startSession(workspaceId)
+    },
+    open: (sessionId) => {
+      deactivateRemoteConversation()
+      ctx.sessions.open(sessionId)
+    },
     searchSessions,
     searchResultLimit: ctx.sessions.searchResultLimit,
     renameSession: async (sessionId, title) => {
@@ -123,7 +130,10 @@ export function apply(ctx: ClientContext): void {
     },
     forkSession: (sessionId) => {
       ctx.sessions.fork({ sessionId, increaseTitle: true })
-        .then((childId) => { ctx.sessions.open(childId) })
+        .then((childId) => {
+          deactivateRemoteConversation()
+          ctx.sessions.open(childId)
+        })
         .catch(() => {
           // Fork or child-rename failure keeps the current selection.
         })

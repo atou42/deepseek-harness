@@ -62,6 +62,36 @@ export interface RemoteConversationTarget {
   readonly sessionTitle?: string
 }
 
+/** JSON values accepted in provider-owned tool input. */
+export type RemoteConversationJsonValue =
+  | null | boolean | number | string
+  | RemoteConversationJsonValue[]
+  | { [key: string]: RemoteConversationJsonValue }
+
+/** Structured provider output rendered with DSH-native progress affordances. */
+export type RemoteConversationBlock =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'thinking'; readonly text: string }
+  | {
+    readonly kind: 'image'
+    readonly source:
+      | { readonly kind: 'url'; readonly url: string }
+      | { readonly kind: 'base64'; readonly mediaType: string; readonly data: string }
+  }
+  | { readonly kind: 'shell-command'; readonly command: string; readonly rawText: string }
+  | { readonly kind: 'tool-use'; readonly id: string; readonly name: string; readonly input: Readonly<Record<string, RemoteConversationJsonValue>> }
+  | {
+    readonly kind: 'tool-result'
+    readonly toolUseId: string
+    readonly content: string | readonly RemoteConversationBlock[]
+    readonly isError?: boolean
+  }
+  | {
+    readonly kind: 'system-note'
+    readonly noteType: 'session_created' | 'forked' | 'compacted' | 'info'
+    readonly text: string
+  }
+
 /** One provider-owned remote Turn. */
 export interface RemoteConversationTurn {
   readonly id: RemoteResourceId
@@ -69,6 +99,7 @@ export interface RemoteConversationTurn {
   readonly status: string
   readonly userText?: string
   readonly assistantText?: string
+  readonly blocks?: readonly RemoteConversationBlock[]
   readonly errorMessage?: string
   readonly updatedAt: string
 }

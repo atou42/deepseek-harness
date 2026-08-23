@@ -2942,6 +2942,9 @@ importers:
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale
+      '@deepseek-ai/dsh-client-remote-roots':
+        specifier: workspace:^
+        version: link:../remote-roots
       '@deepseek-ai/dsh-client-runtime':
         specifier: workspace:^
         version: link:../runtime

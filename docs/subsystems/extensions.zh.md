@@ -116,6 +116,12 @@ Typed Remote service backed only by Cohub account tokens and platform HTTP.
 @Remote('listSpaces') listSpaces(): Promise<readonly CohubSpaceView[]>
 
 /**
+ * List the native Cohub Agent text-model catalog.
+ * @returns The provider-grouped Cohub model catalog.
+ */
+@Remote('listModels') listModels(): Promise<CohubModelCatalog>
+
+/**
  * List every conversation in one Space, following the platform cursor.
  * @param spaceId Cohub Space identity.
  * @returns The complete Session listing.
@@ -136,9 +142,10 @@ Typed Remote service backed only by Cohub account tokens and platform HTTP.
  * @param sessionId Existing Cohub Session identity, or null for a new Session.
  * @param content User-authored text.
  * @param clientMessageId Caller-generated idempotency identity.
+ * @param selection Optional model and thinking-effort override for this Turn.
  * @returns The Cohub-owned Session and accepted Turn.
  */
-@Remote('sendPrompt') sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission>
+@Remote('sendPrompt') sendPrompt( spaceId: string, sessionId: string | null, content: string, clientMessageId: string, selection?: CohubPromptSelection, ): Promise<CohubPromptSubmission>
 
 /**
  * Abort one running native Cohub Agent Turn after verifying its Space ownership.

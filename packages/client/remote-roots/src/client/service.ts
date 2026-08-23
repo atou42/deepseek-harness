@@ -1,7 +1,8 @@
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  RemoteConversationAbortResult, RemoteConversationModelCatalog, RemoteConversationSelection,
+  RemoteConversationAbortResult, RemoteConversationBlock, RemoteConversationJsonValue,
+  RemoteConversationModelCatalog, RemoteConversationSelection,
   RemoteConversationSubmission, RemoteConversationTarget, RemoteConversationView,
   RemoteDirectoryListing, RemoteResourceId, RemoteRootSource, RemoteRootSourceId,
   RemoteRootSourceSnapshot, RemoteRootsSnapshot, RemoteTextFile, RemoteTextWriteResult,
@@ -28,6 +29,96 @@ function record(value: unknown, field: string): Record<string, unknown> {
     throw new TypeError(`remote-roots: ${field} must be an object`)
   }
   return value as Record<string, unknown>
+}
+
+function jsonValue(value: unknown, field: string): RemoteConversationJsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError(`remote-roots: ${field} must contain finite numbers`)
+    return value
+  }
+  if (Array.isArray(value)) return value.map((item, index) => jsonValue(item, `${field}[${String(index)}]`))
+  const source = record(value, field)
+  return Object.fromEntries(Object.entries(source).map(([key, item]) => [key, jsonValue(item, `${field}.${key}`)]))
+}
+
+function jsonRecord(value: unknown, field: string): Readonly<Record<string, RemoteConversationJsonValue>> {
+  const source = record(value, field)
+  return Object.freeze(Object.fromEntries(Object.entries(source).map(([key, item]) => [key, jsonValue(item, `${field}.${key}`)])))
+}
+
+function validateConversationBlocks(value: unknown, field: string): readonly RemoteConversationBlock[] {
+  if (!Array.isArray(value)) throw new TypeError(`remote-roots: ${field} must be an array`)
+  return Object.freeze(value.map((item, index) => validateConversationBlock(item, `${field}[${String(index)}]`)))
+}
+
+function validateConversationBlock(value: unknown, field: string): RemoteConversationBlock {
+  const block = record(value, field)
+  const kind = nonBlank(block.kind, `${field} kind`)
+  switch (kind) {
+    case 'text':
+    case 'thinking':
+      if (typeof block.text !== 'string') throw new TypeError(`remote-roots: ${field} text must be a string`)
+      return Object.freeze({ kind, text: block.text })
+    case 'image': {
+      const source = record(block.source, `${field} source`)
+      const sourceKind = nonBlank(source.kind, `${field} source kind`)
+      if (sourceKind === 'url') {
+        return Object.freeze({ kind: 'image', source: Object.freeze({ kind: 'url', url: nonBlank(source.url, `${field} source url`) }) })
+      }
+      if (sourceKind === 'base64') {
+        return Object.freeze({
+          kind: 'image',
+          source: Object.freeze({
+            kind: 'base64',
+            mediaType: nonBlank(source.mediaType, `${field} source mediaType`),
+            data: nonBlank(source.data, `${field} source data`),
+          }),
+        })
+      }
+      throw new TypeError(`remote-roots: ${field} image source kind "${sourceKind}" is unsupported`)
+    }
+    case 'shell-command':
+      return Object.freeze({
+        kind,
+        command: nonBlank(block.command, `${field} command`),
+        rawText: typeof block.rawText === 'string' ? block.rawText : nonBlank(block.rawText, `${field} rawText`),
+      })
+    case 'tool-use':
+      return Object.freeze({
+        kind,
+        id: nonBlank(block.id, `${field} id`),
+        name: nonBlank(block.name, `${field} name`),
+        input: jsonRecord(block.input, `${field} input`),
+      })
+    case 'tool-result': {
+      const content = typeof block.content === 'string'
+        ? block.content
+        : validateConversationBlocks(block.content, `${field} content`)
+      if (block.isError !== undefined && typeof block.isError !== 'boolean') {
+        throw new TypeError(`remote-roots: ${field} isError must be a boolean`)
+      }
+      return Object.freeze({
+        kind,
+        toolUseId: nonBlank(block.toolUseId, `${field} toolUseId`),
+        content,
+        ...block.isError === undefined ? {} : { isError: block.isError },
+      })
+    }
+    case 'system-note': {
+      const noteType = nonBlank(block.noteType, `${field} noteType`)
+      if (!['session_created', 'forked', 'compacted', 'info'].includes(noteType)) {
+        throw new TypeError(`remote-roots: ${field} noteType "${noteType}" is unsupported`)
+      }
+      return Object.freeze({
+        kind,
+        noteType: noteType as 'session_created' | 'forked' | 'compacted' | 'info',
+        text: nonBlank(block.text, `${field} text`),
+      })
+    }
+    default:
+      throw new TypeError(`remote-roots: ${field} kind "${kind}" is unsupported`)
+  }
 }
 
 function emptyRoots(value: unknown, field: string): readonly [] {
@@ -109,6 +200,9 @@ function validateConversation(
     }
     const userText = optional(turn.userText, `conversation turn "${id}" userText`)
     const assistantText = optional(turn.assistantText, `conversation turn "${id}" assistantText`)
+    const blocks = turn.blocks === undefined
+      ? undefined
+      : validateConversationBlocks(turn.blocks, `conversation turn "${id}" blocks`)
     const errorMessage = optional(turn.errorMessage, `conversation turn "${id}" errorMessage`)
     const updatedAt = nonBlank(turn.updatedAt, `conversation turn "${id}" updatedAt`)
     if (!Number.isFinite(Date.parse(updatedAt))) throw new TypeError(`remote-roots: conversation turn "${id}" updatedAt is invalid`)
@@ -118,6 +212,7 @@ function validateConversation(
       status: nonBlank(turn.status, `conversation turn "${id}" status`),
       ...userText === undefined ? {} : { userText },
       ...assistantText === undefined ? {} : { assistantText },
+      ...blocks === undefined ? {} : { blocks },
       ...errorMessage === undefined ? {} : { errorMessage },
       updatedAt,
     })

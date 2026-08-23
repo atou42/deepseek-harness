@@ -25,6 +25,7 @@ import type {
   CohubSpaceView,
   CohubSpaceWriteResult,
   CohubAbortTurnResult,
+  CohubConversationBlock,
   CohubModelCatalog,
   CohubPromptSelection,
   CohubThinkingLevel,
@@ -353,6 +354,9 @@ function parseTurn(value: unknown, sessionId: string, field: string): CohubTurnV
   if (turn.sessionId !== sessionId) throw new TypeError(`cohub-spaces: turn "${id}" does not belong to Session "${sessionId}"`)
   const userText = optionalText(turn.userText, `turn "${id}" userText`)
   const assistantText = optionalText(turn.assistantText, `turn "${id}" assistantText`)
+  const blocks = turn.assistantContent === null || turn.assistantContent === undefined
+    ? undefined
+    : parseConversationBlocks(turn.assistantContent, `turn "${id}" assistantContent`)
   const errorMessage = optionalText(turn.errorMessage, `turn "${id}" errorMessage`)
   return Object.freeze({
     id,
@@ -361,10 +365,131 @@ function parseTurn(value: unknown, sessionId: string, field: string): CohubTurnV
     status: nonBlank(turn.status, `turn "${id}" status`),
     ...userText === undefined ? {} : { userText },
     ...assistantText === undefined ? {} : { assistantText },
+    ...blocks === undefined ? {} : { blocks },
     ...errorMessage === undefined ? {} : { errorMessage },
     createdAt: isoInstant(turn.createdAt, `turn "${id}" createdAt`),
     updatedAt: isoInstant(turn.updatedAt, `turn "${id}" updatedAt`),
   })
+}
+
+function parseConversationBlocks(value: unknown, field: string): readonly CohubConversationBlock[] {
+  if (!Array.isArray(value)) throw new TypeError(`cohub-spaces: ${field} must be an array`)
+  return Object.freeze(value.map((item, index) => parseConversationBlock(item, `${field}[${String(index)}]`)))
+}
+
+function parseJsonValue(value: unknown, field: string): JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError(`cohub-spaces: ${field} must contain finite numbers`)
+    return value
+  }
+  if (Array.isArray(value)) return value.map((item, index) => parseJsonValue(item, `${field}[${String(index)}]`))
+  const source = record(value, field)
+  return Object.fromEntries(Object.entries(source).map(([key, item]) => [key, parseJsonValue(item, `${field}.${key}`)]))
+}
+
+function parseJsonRecord(value: unknown, field: string): Readonly<Record<string, JsonValue>> {
+  const source = record(value, field)
+  return Object.freeze(Object.fromEntries(Object.entries(source).map(([key, item]) => [key, parseJsonValue(item, `${field}.${key}`)])))
+}
+
+function parseConversationBlock(value: unknown, field: string): CohubConversationBlock {
+  const block = record(value, field)
+  const type = nonBlank(block.type, `${field} type`)
+  switch (type) {
+    case 'text':
+      if (typeof block.text !== 'string') throw new TypeError(`cohub-spaces: ${field} text must be a string`)
+      return Object.freeze({ kind: 'text', text: block.text })
+    case 'thinking':
+      if (typeof block.thinking !== 'string') throw new TypeError(`cohub-spaces: ${field} thinking must be a string`)
+      return Object.freeze({ kind: 'thinking', text: block.thinking })
+    case 'image': {
+      const source = record(block.source, `${field} source`)
+      const sourceType = nonBlank(source.type, `${field} source type`)
+      if (sourceType === 'url') {
+        return Object.freeze({ kind: 'image', source: Object.freeze({ kind: 'url', url: nonBlank(source.url, `${field} source url`) }) })
+      }
+      if (sourceType === 'base64') {
+        return Object.freeze({
+          kind: 'image',
+          source: Object.freeze({
+            kind: 'base64',
+            mediaType: nonBlank(source.media_type, `${field} source media_type`),
+            data: nonBlank(source.data, `${field} source data`),
+          }),
+        })
+      }
+      throw new TypeError(`cohub-spaces: ${field} image source type "${sourceType}" is unsupported`)
+    }
+    case 'shell_command':
+      return Object.freeze({
+        kind: 'shell-command',
+        command: nonBlank(block.command, `${field} command`),
+        rawText: typeof block.rawText === 'string' ? block.rawText : nonBlank(block.rawText, `${field} rawText`),
+      })
+    case 'tool_use':
+      return Object.freeze({
+        kind: 'tool-use',
+        id: nonBlank(block.id, `${field} id`),
+        name: nonBlank(block.name, `${field} name`),
+        input: parseJsonRecord(block.input, `${field} input`),
+      })
+    case 'tool_result': {
+      const content = typeof block.content === 'string'
+        ? block.content
+        : parseConversationBlocks(block.content, `${field} content`)
+      if (block.is_error !== undefined && typeof block.is_error !== 'boolean') {
+        throw new TypeError(`cohub-spaces: ${field} is_error must be a boolean`)
+      }
+      return Object.freeze({
+        kind: 'tool-result',
+        toolUseId: nonBlank(block.tool_use_id, `${field} tool_use_id`),
+        content,
+        ...block.is_error === undefined ? {} : { isError: block.is_error },
+      })
+    }
+    case 'system_note': {
+      const noteType = nonBlank(block.note_type, `${field} note_type`)
+      if (!['session_created', 'forked', 'compacted', 'info'].includes(noteType)) {
+        throw new TypeError(`cohub-spaces: ${field} note_type "${noteType}" is unsupported`)
+      }
+      return Object.freeze({
+        kind: 'system-note',
+        noteType: noteType as 'session_created' | 'forked' | 'compacted' | 'info',
+        text: nonBlank(block.text, `${field} text`),
+      })
+    }
+    default:
+      throw new TypeError(`cohub-spaces: ${field} type "${type}" is unsupported`)
+  }
+}
+
+function parseStreamSnapshot(value: unknown, spaceId: string, sessionId: string): {
+  readonly turnId: string
+  readonly blocks: readonly CohubConversationBlock[]
+} | undefined {
+  const body = record(value, 'turn stream snapshot response')
+  if (body.snapshot === null) return undefined
+  const snapshot = record(body.snapshot, 'turn stream snapshot')
+  if (snapshot.version !== 2) throw new TypeError('cohub-spaces: turn stream snapshot version must be 2')
+  if (snapshot.spaceId !== spaceId) throw new TypeError('cohub-spaces: turn stream snapshot Space does not match request')
+  if (snapshot.sessionId !== sessionId) throw new TypeError('cohub-spaces: turn stream snapshot Session does not match request')
+  if (!Array.isArray(snapshot.intermediateMessages)) {
+    throw new TypeError('cohub-spaces: turn stream snapshot intermediateMessages must be an array')
+  }
+  const blocks: CohubConversationBlock[] = []
+  for (const [index, value] of snapshot.intermediateMessages.entries()) {
+    const intermediate = record(value, `turn stream snapshot intermediateMessages[${String(index)}]`)
+    blocks.push(...parseConversationBlocks(intermediate.content, `turn stream snapshot intermediateMessages[${String(index)}] content`))
+  }
+  const current = record(snapshot.current, 'turn stream snapshot current')
+  blocks.push(...parseConversationBlocks(current.content, 'turn stream snapshot current content'))
+  if (snapshot.turnId === null) {
+    if (blocks.length === 0) return undefined
+    throw new TypeError('cohub-spaces: turn stream snapshot has content without a Turn id')
+  }
+  const turnId = nonBlank(snapshot.turnId, 'turn stream snapshot turnId')
+  return Object.freeze({ turnId, blocks: Object.freeze(blocks) })
 }
 
 function parseTurnResponse(value: unknown, spaceId: string, sessionId?: string): {
@@ -541,7 +666,10 @@ export class CohubSpacesGateway extends TypertRemoteService {
     return this.track(this.listSpacesImpl())
   }
 
-  /** List the native Cohub Agent text-model catalog. */
+  /**
+   * List the native Cohub Agent text-model catalog.
+   * @returns The provider-grouped Cohub model catalog.
+   */
   @Remote('listModels')
   listModels(): Promise<CohubModelCatalog> {
     return this.track(this.listModelsImpl())
@@ -574,6 +702,7 @@ export class CohubSpacesGateway extends TypertRemoteService {
    * @param sessionId Existing Cohub Session identity, or null for a new Session.
    * @param content User-authored text.
    * @param clientMessageId Caller-generated idempotency identity.
+   * @param selection Optional model and thinking-effort override for this Turn.
    * @returns The Cohub-owned Session and accepted Turn.
    */
   @Remote('sendPrompt')
@@ -732,6 +861,20 @@ export class CohubSpacesGateway extends TypertRemoteService {
       cursors.add(cursor)
     } while (true)
     turns.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
+    if (turns.some(turn => !['completed', 'failed', 'cancelled', 'interrupted', 'merged'].includes(turn.status.toLowerCase()))) {
+      const { data } = await this.requestWithToken(
+        `/api/sessions/${encodeURIComponent(sessionId)}/turns/stream-snapshot`,
+        token,
+      )
+      const snapshot = parseStreamSnapshot(data, spaceId, sessionId)
+      if (snapshot !== undefined) {
+        const index = turns.findIndex(turn => turn.id === snapshot.turnId)
+        if (index === -1) throw new TypeError(`cohub-spaces: stream snapshot Turn "${snapshot.turnId}" is absent from conversation`)
+        const turn = turns[index]
+        if (turn === undefined) throw new TypeError('cohub-spaces: stream snapshot Turn index is invalid')
+        turns[index] = Object.freeze({ ...turn, blocks: snapshot.blocks })
+      }
+    }
     return Object.freeze({ spaceId, session, turns: Object.freeze(turns) })
   }
 

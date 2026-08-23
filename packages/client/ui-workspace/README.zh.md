@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-共享 Workspace 浏览器与选择器插件。`WorkspaceBrowser` 填充侧边栏的 `sidebar.workspaces` slot，`WorkspacePicker` 则填充页面局部 Session Intent 主视觉区的 `conversation.hero.workspace` slot。主选择器会一起列出和搜索本地 Workspace 与远端根。远端根只显示一个带 Provider 标识的条目；选择 Cohub Space 会打开由 Cohub 持有的云端会话，不会创建本地 DSH Session，也不会把远端根接纳成本地 Workspace。本地会话需要云端资产时，从输入框的 `@` 菜单引用 Cohub Space。
+共享 Workspace 浏览器与选择器插件。`WorkspaceBrowser` 填充侧边栏的 `sidebar.workspaces` slot，`WorkspacePicker` 则填充页面局部 Session Intent 主视觉区的 `conversation.hero.workspace` slot。主选择器会一起列出和搜索本地 Workspace 与远端根。远端根只显示一个带 Provider 标识的条目；选择 Cohub Space 会打开由 Cohub 持有的云端会话，不会创建本地 DSH Session，也不会把远端根接纳成本地 Workspace。本地会话需要云端资产时，从输入框的 `@` 菜单引用 Cohub Space。开始或打开任何本地 Session 时，会先显式关闭当前 Provider 会话界面，再继续本地导航。
 
 侧边栏注册还会声明与供应方无关的 `sidebar.workspaces.remoteRoots` 子 slot。单独加载的展示包可以在这里渲染带标识、形似文件夹的远程根，但这个 slot 的空 owner share 不会授予 Workspace、路径、cwd 或 Shell 语义。进行本地 Session 搜索时，远程根会隐藏，并且永远不会进入 `useWorkspaces`。
 

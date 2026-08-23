@@ -402,4 +402,46 @@ describe('RemoteRootsService', () => {
     expect(sendConversationMessage).toHaveBeenCalledOnce()
     expect(abortConversationTurn).toHaveBeenCalledOnce()
   })
+
+  it('validates and detaches structured provider conversation blocks', async () => {
+    const { service } = await bench()
+    const fixture = provider()
+    const raw = {
+      rootId: resourceId('space:one'),
+      session: { id: resourceId('session:one'), title: 'Native chat', status: 'active' },
+      turns: [{
+        id: resourceId('turn:one'), sequence: 1, status: 'completed',
+        blocks: [
+          { kind: 'text', text: 'answer' },
+          { kind: 'thinking', text: 'reason' },
+          { kind: 'image', source: { kind: 'url', url: 'https://example.test/a.png' } },
+          { kind: 'image', source: { kind: 'base64', mediaType: 'image/png', data: 'YWJj' } },
+          { kind: 'shell-command', command: 'pwd', rawText: 'pwd' },
+          { kind: 'tool-use', id: 'tool-1', name: 'Bash', input: { args: ['pwd', 1, true, null] } },
+          { kind: 'tool-result', toolUseId: 'tool-1', content: 'ok', isError: false },
+          { kind: 'tool-result', toolUseId: 'tool-2', content: [{ kind: 'system-note', noteType: 'info', text: 'note' }], isError: true },
+          { kind: 'system-note', noteType: 'compacted', text: 'compacted' },
+        ],
+        updatedAt: '2026-08-23T12:00:00.000Z',
+      }],
+    }
+    const readConversation = vi.fn()
+      .mockResolvedValueOnce(raw)
+      .mockResolvedValueOnce({
+        ...raw,
+        turns: [{ ...raw.turns[0], blocks: [{ kind: 'tool-use', id: 'tool-bad', name: 'Bad', input: { value: Number.POSITIVE_INFINITY } }] }],
+      })
+    service.register({ ...fixture.source, readConversation })
+
+    const value = await service.readConversation(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), sessionId: resourceId('session:one'),
+    })
+    ;(raw.turns[0]!.blocks[0] as { text: string }).text = 'mutated'
+    expect(value.turns[0]?.blocks?.[0]).toEqual({ kind: 'text', text: 'answer' })
+    expect(Object.isFrozen(value.turns[0]?.blocks)).toBe(true)
+    expect(Object.isFrozen(value.turns[0]?.blocks?.[5])).toBe(true)
+    await expect(service.readConversation(sourceId('fixture.remote'), {
+      rootId: resourceId('space:one'), sessionId: resourceId('session:one'),
+    })).rejects.toThrow(/must contain finite numbers/)
+  })
 })

@@ -21,6 +21,9 @@
       "path": "../runtime"
     },
     {
+      "path": "../remote-roots"
+    },
+    {
       "path": "../ui-layout"
     },
     {

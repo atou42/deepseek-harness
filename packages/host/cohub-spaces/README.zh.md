@@ -4,7 +4,7 @@
 
 Host 侧 Cohub Space 适配器。它只通过唯一的 `ctx.cohubAccount` 所有者取得访问令牌，校验平台返回的每一份数据，并提供类型化 Remote 方法，用于列出可访问 Space、完整读取分页 Session 和 Turn、提交和取消原生 Cohub Agent Turn，以及执行相对目录树、文本文件和命令操作。每个本地 DSH Agent 都会获得四个 Cohub 工具；普通会话必须从 `@Cohub Space` 引用取得明确的 `space_id`，旧版已绑定会话仍可省略该参数。Space 始终是远程语义根；本包不会把它的路径映射到本地文件系统，也不会运行同步循环或发布 Work。
 
-实现直接调用 Cohub 平台 HTTP API，不依赖 Cohub CLI 或 SDK。Space、Session、Turn、模型与文件标识可以经过浏览器边界，账号凭证不会。原生 prompt 必须带调用方生成的 `clientMessageId`，可以携带经过校验的 Provider/模型组合与 Cohub 思考强度，并且只接受 Cohub 的即时 Session/Turn 响应；取消前会校验 Turn 的 Space 归属。Session 分页遇到重复游标、重复身份、损坏的标题类型或跨 Space 数据时会明确失败，不会返回残缺列表；空字符串或 null 的 Session 标题会作为无标题会话处理，由浏览器生成显示名称。文件版本会原样保留平台返回的毫秒时间戳（包括小数毫秒）和字节大小。二进制文件与 URL 交付文件会明确失败。过期版本写入会返回当前远端文本与版本，不会覆盖它。命令会在配置的时间范围内轮询 Cohub 任务，直到成功或失败。
+实现直接调用 Cohub 平台 HTTP API，不依赖 Cohub CLI 或 SDK。Space、Session、Turn、模型与文件标识可以经过浏览器边界，账号凭证不会。原生 prompt 必须带调用方生成的 `clientMessageId`，可以携带经过校验的 Provider/模型组合与 Cohub 思考强度，并且只接受 Cohub 的即时 Session/Turn 响应；取消前会校验 Turn 的 Space 归属。已保存的 Assistant 内容会保留 Cohub 文本、思考、工具、Shell、系统提示和图片消息块；Turn 运行期间还会读取平台流快照，让部分思考和工具活动保持最新。Session 分页遇到重复游标、重复身份、损坏的标题类型或跨 Space 数据时会明确失败，不会返回残缺列表；空字符串或 null 的 Session 标题会作为无标题会话处理，由浏览器生成显示名称。文件版本会原样保留平台返回的毫秒时间戳（包括小数毫秒）和字节大小。二进制文件与 URL 交付文件会明确失败。过期版本写入会返回当前远端文本与版本，不会覆盖它。命令会在配置的时间范围内轮询 Cohub 任务，直到成功或失败。
 
 ## 配置
 

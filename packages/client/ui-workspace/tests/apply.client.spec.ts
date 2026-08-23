@@ -28,6 +28,7 @@ async function bench() {
   const binding = vi.fn(() => ({ session: { rename: renameSession } }))
   const fork = vi.fn(async () => 'forked' as never)
   const openRemoteConversation = vi.fn()
+  const deactivateRemoteConversation = vi.fn()
   const remoteSnapshot = { getSnapshot: () => ({ revision: 0, sources: [] }), subscribe: () => () => {} }
   ctx.provide('workspaces', {
     create, startSession, rename, insertSessionBefore,
@@ -36,6 +37,7 @@ async function bench() {
   ctx.provide('remoteRoots', {
     snapshot: remoteSnapshot,
     openConversation: openRemoteConversation,
+    deactivate: deactivateRemoteConversation,
   } as never)
   ctx.provide('connection', {
     hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
@@ -49,7 +51,7 @@ async function bench() {
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, startSession, rename,
     insertSessionBefore, open, clear, search, renameSession, binding, fork,
-    openRemoteConversation, remoteSnapshot,
+    openRemoteConversation, deactivateRemoteConversation, remoteSnapshot,
   }
 }
 
@@ -92,10 +94,13 @@ describe('ui-workspace apply', () => {
     const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
     // Both arms delegate to the runtime's shared New Session action.
     browser.startSession('ws' as never)
+    expect(b.deactivateRemoteConversation).toHaveBeenCalledOnce()
     expect(b.startSession).toHaveBeenCalledWith('ws')
     browser.startSession()
+    expect(b.deactivateRemoteConversation).toHaveBeenCalledTimes(2)
     expect(b.startSession).toHaveBeenLastCalledWith(undefined)
     browser.open('session' as never)
+    expect(b.deactivateRemoteConversation).toHaveBeenCalledTimes(3)
     expect(b.open).toHaveBeenCalledWith('session')
     const signal = new AbortController().signal
     await expect(browser.searchSessions('match', signal)).resolves.toEqual({

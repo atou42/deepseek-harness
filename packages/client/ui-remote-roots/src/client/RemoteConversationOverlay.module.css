@@ -33,6 +33,19 @@
 .turn { display: grid; gap: 14px; margin-bottom: 32px; }
 .user { justify-self: end; max-width: 80%; border-radius: 18px 18px 4px 18px; padding: 10px 15px; background: var(--dsw-alias-interactive-bg-hover); white-space: pre-wrap; }
 .assistant { min-width: 0; line-height: 1.7; }
+.flowRow { display: flex; min-width: 0; flex-direction: column; }
+.flowHeader { position: relative; overflow: hidden; }
+.flowTitle { font-weight: 400; }
+.flowChevron { color: var(--dsw-alias-label-secondary); }
+.flowSeparator { width: 2px; height: 2px; flex: none; margin: 0 8px; border-radius: 1px; background: var(--dsw-alias-label-caption); }
+.flowSummary { min-width: 0; overflow: hidden; flex: 1 1 auto; color: var(--dsw-alias-label-tertiary); font-size: 14px; line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
+.flowSummary[data-error], .toolBody[data-error] { color: var(--dsw-alias-state-error-primary); }
+.thinkingBody { padding: 4px 0 4px 22px; color: var(--dsw-alias-label-tertiary); font-size: 14px; line-height: 24px; white-space: pre-wrap; word-break: break-word; }
+.toolBody { max-height: 260px; margin: 4px 0 4px 4px; padding: 12px 16px; overflow: auto; border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; background: var(--dsw-alias-markdown-code-block); color: var(--dsw-alias-label-primary); font: var(--dsw-font-markdown-code-block-small); white-space: pre-wrap; }
+.outputImage { display: block; max-width: min(100%, 560px); max-height: 480px; border-radius: 12px; object-fit: contain; }
+.systemNote { color: var(--dsw-alias-label-tertiary); font-size: 13px; }
+.flowRow[data-state='running'] .flowHeader::after { position: absolute; inset-block: 0; left: 0; width: 300px; background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent) 55%, transparent 100%); animation: remote-flow-sweep 2.6s ease-out infinite; content: ''; pointer-events: none; }
+@keyframes remote-flow-sweep { 0% { left: -300px; } 90%, 100% { left: 100%; } }
 .running, .emptyState p { color: var(--dsw-alias-label-tertiary); }
 .error { margin: 6px 0; color: var(--dsw-alias-state-error-primary); }
 .emptyState { display: grid; min-height: 45vh; place-content: center; text-align: center; }
@@ -58,4 +71,8 @@
   .mode { display: none; }
   .historyInner { padding-top: 24px; }
   .composerArea { padding-right: 10px; padding-left: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flowRow[data-state='running'] .flowHeader::after { animation: none; }
 }

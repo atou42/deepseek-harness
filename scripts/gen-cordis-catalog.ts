@@ -566,6 +566,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   CohubBoardSnapshot: 'Cohub Board data is owned by packages/host/cohub-board/README.md',
   CohubSpaceView: 'Cohub Space data is owned by packages/host/cohub-spaces/README.md',
   CohubSpaceSessionList: 'Cohub Session listing is owned by packages/host/cohub-spaces/README.md',
+  CohubModelCatalog: 'Cohub model data is owned by packages/host/cohub-spaces/README.md',
+  CohubPromptSelection: 'Cohub prompt selection is owned by packages/host/cohub-spaces/README.md',
   CohubConversationView: 'Cohub conversation history is owned by packages/host/cohub-spaces/README.md',
   CohubPromptSubmission: 'Cohub prompt submission is owned by packages/host/cohub-spaces/README.md',
   CohubAbortTurnResult: 'Cohub turn cancellation is owned by packages/host/cohub-spaces/README.md',
