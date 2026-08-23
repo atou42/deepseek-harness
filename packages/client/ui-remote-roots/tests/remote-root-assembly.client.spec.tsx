@@ -28,7 +28,7 @@ describe('remote roots through the assembled Workspace browser', () => {
     runtime.provide('locale', locale)
     runtime.provide('connection', {
       hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
-    } as never)
+    })
     runtime.slots.installLocale(locale)
     await runtime.ctx.plugin(RemoteRootsService).await()
     await runtime.root.declare(
@@ -79,7 +79,7 @@ describe('remote roots through the assembled Workspace browser', () => {
     runtime.provide('locale', locale)
     runtime.provide('connection', {
       hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
-    } as never)
+    })
     runtime.slots.installLocale(locale)
     await runtime.ctx.plugin(RemoteRootsService).await()
     await runtime.root.declare(
@@ -108,6 +108,8 @@ describe('remote roots through the assembled Workspace browser', () => {
           updatedAt: '2026-08-16T10:00:00.000Z',
         }],
       })),
+      sendPrompt: vi.fn(),
+      abortTurn: vi.fn(),
       getConversation: vi.fn(async () => ({
         spaceId: 'space-1',
         session: {

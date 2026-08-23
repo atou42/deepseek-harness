@@ -42,8 +42,10 @@ export interface WorkspacePickFlowProps {
   useWorkspaces: <S>(selector: (state: WorkspaceListState) => S) => S
   /** Selector hook over provider-owned remote Spaces. */
   useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
-  /** Start a DSH Session with the selected provider-owned Space attached. */
-  activateRemote: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
+  /** Start a local DSH Session with the selected provider-owned Space attached. */
+  startRemoteWorkspace: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
+  /** Open a provider-owned cloud Session in the selected Space. */
+  openRemoteConversation: (sourceId: RemoteRootSourceId, rootId: RemoteResourceId) => Promise<void>
   /** Adopt a picked host directory as a real Workspace. */
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
   /** Bound occupancy selector hook for this surface's directory-flow hole (empty leaves the surface with no add action). */
@@ -73,7 +75,8 @@ export function WorkspacePickFlow({
   anchorRef,
   useWorkspaces,
   useRemoteRoots,
-  activateRemote,
+  startRemoteWorkspace,
+  openRemoteConversation,
   createWorkspace,
   useDirectoryFlow,
   renderDirectoryFlow,
@@ -87,12 +90,22 @@ export function WorkspacePickFlow({
   const remoteSnapshot = useRemoteRoots(state => state)
   const workspaces = workspaceSnapshot.items
   const remoteEntries = addOnly ? [] : remoteSnapshot.sources.flatMap(source => source.status === 'ready'
-    ? source.roots.filter(root => root.capabilities.workspace === true).map(root => ({
-      id: JSON.stringify(['remote', source.sourceId, root.id]),
-      sourceId: source.sourceId,
-      rootId: root.id,
-      label: `${root.title} · ${root.marker.label}`,
-    }))
+    ? source.roots.flatMap(root => [
+      ...root.capabilities.conversation === 'interactive' ? [{
+        id: JSON.stringify(['remote', 'conversation', source.sourceId, root.id]),
+        sourceId: source.sourceId,
+        rootId: root.id,
+        mode: 'conversation' as const,
+        label: `${root.title} · ${t('picker.mode.cohub')} · ${t('picker.location.cloud')}`,
+      }] : [],
+      ...root.capabilities.workspace === true ? [{
+        id: JSON.stringify(['remote', 'workspace', source.sourceId, root.id]),
+        sourceId: source.sourceId,
+        rootId: root.id,
+        mode: 'workspace' as const,
+        label: `${root.title} · ${t('picker.mode.dsh')} · ${t('picker.location.local')}`,
+      }] : [],
+    ])
     : [])
   const remoteByMenuId = new Map(remoteEntries.map(entry => [entry.id, entry]))
   const getAnchorRect = useCallback(
@@ -231,7 +244,8 @@ export function WorkspacePickFlow({
     const remote = remoteByMenuId.get(id)
     if (remote !== undefined) {
       setActivatingRemote(true)
-      void activateRemote(remote.sourceId, remote.rootId).then(() => {
+      const operation = remote.mode === 'conversation' ? openRemoteConversation : startRemoteWorkspace
+      void operation(remote.sourceId, remote.rootId).then(() => {
         onClose()
       }, (reason: unknown) => {
         setModalError(reason instanceof Error ? reason.message : String(reason))
@@ -244,7 +258,7 @@ export function WorkspacePickFlow({
 
   const selectedRemoteId = remoteSnapshot.active === undefined
     ? undefined
-    : JSON.stringify(['remote', remoteSnapshot.active.sourceId, remoteSnapshot.active.rootId])
+    : JSON.stringify(['remote', 'conversation', remoteSnapshot.active.sourceId, remoteSnapshot.active.rootId])
 
   return (
     <>
@@ -306,7 +320,8 @@ export function WorkspacePicker({
   anchorRef,
   useWorkspaces,
   useRemoteRoots,
-  activateRemote,
+  startRemoteWorkspace,
+  openRemoteConversation,
   selectedId,
   onPick,
   onClose,
@@ -322,7 +337,8 @@ export function WorkspacePicker({
       anchorRef={anchorRef}
       useWorkspaces={useWorkspaces}
       useRemoteRoots={useRemoteRoots}
-      activateRemote={activateRemote}
+      startRemoteWorkspace={startRemoteWorkspace}
+      openRemoteConversation={openRemoteConversation}
       createWorkspace={createWorkspace}
       useDirectoryFlow={useDirectoryFlow}
       renderDirectoryFlow={owner => renderSlot('conversation.hero.workspace.directoryFlow', owner)}

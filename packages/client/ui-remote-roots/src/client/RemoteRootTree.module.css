@@ -82,3 +82,24 @@ button.row:hover { background: var(--dsw-alias-interactive-bg-hover); }
   cursor: pointer;
   text-decoration: underline;
 }
+
+.modeActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px 8px 6px 30px;
+}
+
+.modeActions button {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.modeActions button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.modeActions button:disabled { opacity: .45; cursor: default; }

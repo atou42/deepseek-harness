@@ -19,12 +19,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function LeafRow({ entry, sourceId, rootId, depth, activate, t }: {
+function LeafRow({ entry, sourceId, rootId, depth, openConversation, t }: {
   entry: RemoteResourceEntry
   sourceId: RemoteRootSourceId
   rootId: RemoteResourceId
   depth: number
-  activate: RemoteRootTreeProps['activate']
+  openConversation: RemoteRootTreeProps['openConversation']
   t: Translate
 }) {
   const [activationError, setActivationError] = useState<string>()
@@ -45,7 +45,7 @@ function LeafRow({ entry, sourceId, rootId, depth, activate, t }: {
       data-remote-resource-id={entry.id}
       onClick={() => {
         setActivationError(undefined)
-        void activate(sourceId, rootId, entry.id, entry.name).catch((error: unknown) => {
+        void openConversation(sourceId, rootId, entry.id, entry.name).catch((error: unknown) => {
           setActivationError(errorMessage(error))
         })
       }}
@@ -73,17 +73,21 @@ interface FolderProps {
   readonly id: RemoteResourceId
   readonly name: string
   readonly marker?: RemoteRootView['marker']
+  readonly capabilities?: RemoteRootView['capabilities']
   readonly depth: number
   readonly list: RemoteRootTreeProps['list']
-  readonly activate: RemoteRootTreeProps['activate']
+  readonly openConversation: RemoteRootTreeProps['openConversation']
+  readonly startWorkspace: RemoteRootTreeProps['startWorkspace']
   readonly t: Translate
 }
 
-function Folder({ sourceId, rootId, id, name, marker, depth, list, activate, t }: FolderProps) {
+function Folder({ sourceId, rootId, id, name, marker, capabilities, depth, list, openConversation, startWorkspace, t }: FolderProps) {
   const [open, setOpen] = useState(false)
   const [listing, setListing] = useState<ListingState>({ status: 'idle' })
   const request = useRef<{ controller: AbortController; generation: number }>()
   const generation = useRef(0)
+  const [actionError, setActionError] = useState<string>()
+  const [actionBusy, setActionBusy] = useState(false)
 
   const load = (): void => {
     request.current?.controller.abort()
@@ -125,6 +129,15 @@ function Folder({ sourceId, rootId, id, name, marker, depth, list, activate, t }
     if (listing.status === 'idle' || listing.status === 'error') load()
   }
 
+  const runAction = (operation: () => Promise<void>): void => {
+    if (actionBusy) return
+    setActionBusy(true)
+    setActionError(undefined)
+    void operation().catch((error: unknown) => {
+      setActionError(errorMessage(error))
+    }).finally(() => { setActionBusy(false) })
+  }
+
   return (
     <div role="none" data-remote-root={marker === undefined ? undefined : id}>
       <button
@@ -145,6 +158,27 @@ function Folder({ sourceId, rootId, id, name, marker, depth, list, activate, t }
       </button>
       {open && (
         <div role="group">
+          {capabilities !== undefined && (
+            <div className={css.modeActions}>
+              {capabilities.conversation === 'interactive' && (
+                <button
+                  type="button"
+                  disabled={actionBusy}
+                  aria-label={t('mode.cohub.aria', { name })}
+                  onClick={() => { runAction(() => openConversation(sourceId, rootId)) }}
+                >{t('mode.cohub')}</button>
+              )}
+              {capabilities.workspace === true && (
+                <button
+                  type="button"
+                  disabled={actionBusy}
+                  aria-label={t('mode.dsh.aria', { name })}
+                  onClick={() => { runAction(() => startWorkspace(sourceId, rootId)) }}
+                >{t('mode.dsh')}</button>
+              )}
+            </div>
+          )}
+          {actionError !== undefined && <p className={css.error} role="alert">{actionError}</p>}
           {listing.status === 'loading' && <div className={css.status} role="status">{t('folder.loading')}</div>}
           {listing.status === 'error' && (
             <div className={css.error} role="alert">
@@ -165,18 +199,24 @@ function Folder({ sourceId, rootId, id, name, marker, depth, list, activate, t }
                 name={entry.name}
                 depth={depth + 1}
                 list={list}
-                activate={activate}
+                openConversation={openConversation}
+                startWorkspace={startWorkspace}
                 t={t}
               />
             )
-            : <LeafRow key={entry.id} entry={entry} sourceId={sourceId} rootId={rootId} depth={depth + 1} activate={activate} t={t} />)}
+            : (
+              <LeafRow
+                key={entry.id} entry={entry} sourceId={sourceId} rootId={rootId}
+                depth={depth + 1} openConversation={openConversation} t={t}
+              />
+            ))}
         </div>
       )}
     </div>
   )
 }
 
-export function RemoteRootTree({ useRemoteRoots, list, activate, t }: RemoteRootTreeProps) {
+export function RemoteRootTree({ useRemoteRoots, list, openConversation, startWorkspace, t }: RemoteRootTreeProps) {
   const sources = useRemoteRoots(snapshot => snapshot.sources)
   if (sources.length === 0) return null
   return (
@@ -200,9 +240,11 @@ export function RemoteRootTree({ useRemoteRoots, list, activate, t }: RemoteRoot
                 id={root.id}
                 name={root.title}
                 marker={root.marker}
+                capabilities={root.capabilities}
                 depth={0}
                 list={list}
-                activate={activate}
+                openConversation={openConversation}
+                startWorkspace={startWorkspace}
                 t={t}
               />
             ))}

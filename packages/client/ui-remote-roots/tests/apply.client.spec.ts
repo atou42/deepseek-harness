@@ -17,13 +17,20 @@ async function bench() {
   locale.setLocale('zh')
   const snapshot = { getSnapshot: () => ({ revision: 0, sources: [] }), subscribe: () => () => {} }
   const list = vi.fn()
-  const activate = vi.fn()
+  const openConversation = vi.fn()
+  const startWorkspace = vi.fn()
   const deactivate = vi.fn()
   const readConversation = vi.fn()
+  const sendConversationMessage = vi.fn()
+  const abortConversationTurn = vi.fn()
   ctx.provide('remoteRoots', {
-    snapshot, list, activate, deactivate, readConversation,
+    snapshot, list, openConversation, startWorkspace, deactivate, readConversation,
+    sendConversationMessage, abortConversationTurn,
   } as never)
-  return { ctx, slots, locale, snapshot, list, activate, deactivate, readConversation }
+  return {
+    ctx, slots, locale, snapshot, list, openConversation, startWorkspace, deactivate,
+    readConversation, sendConversationMessage, abortConversationTurn,
+  }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -58,8 +65,10 @@ describe('ui-remote-roots apply', () => {
     expect(before.list).toHaveBeenCalledWith('fixture.remote', {
       rootId: 'root', parentId: 'folder', signal,
     })
-    injected.activate('fixture.remote' as never, 'root' as never, 'session' as never, 'Session')
-    expect(before.activate).toHaveBeenCalledWith('fixture.remote', 'root', 'session', 'Session')
+    await injected.openConversation('fixture.remote' as never, 'root' as never, 'session' as never, 'Session')
+    expect(before.openConversation).toHaveBeenCalledWith('fixture.remote', 'root', 'session', 'Session')
+    await injected.startWorkspace('fixture.remote' as never, 'root' as never)
+    expect(before.startWorkspace).toHaveBeenCalledWith('fixture.remote', 'root')
     const overlayEntry = before.slots.entries('shell.overlay')[0]!
     expect(overlayEntry.component).toBe(RemoteConversationOverlay)
     const overlay = (overlayEntry.inject as unknown as () => RemoteConversationOverlayInjected)()

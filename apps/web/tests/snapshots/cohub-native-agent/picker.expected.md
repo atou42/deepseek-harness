@@ -1,0 +1,12 @@
+- menu:
+  - img
+  - searchbox "Search workspaces"
+  - menuitem "Native Space · Cohub Agent · Cloud":
+    - img
+    - text: Native Space · Cohub Agent · Cloud
+  - menuitem "Native Space · DSH Agent · Local":
+    - img
+    - text: Native Space · DSH Agent · Local
+  - menuitem "Add workspace…":
+    - img
+    - text: Add workspace…

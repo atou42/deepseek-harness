@@ -42,6 +42,21 @@ export interface CohubConversationView {
   readonly turns: readonly CohubTurnView[]
 }
 
+/** One native Cohub Agent Turn accepted by the platform. */
+export interface CohubPromptSubmission {
+  readonly spaceId: string
+  readonly session: CohubSessionView
+  readonly turn: CohubTurnView
+}
+
+/** Confirmation that Cohub accepted an abort for one native Agent Turn. */
+export interface CohubAbortTurnResult {
+  readonly ok: true
+  readonly spaceId: string
+  readonly sessionId: string
+  readonly turnId: string
+}
+
 /** One ordinary DSH Session bound to a Cohub Space. */
 export interface CohubDshSessionBinding {
   readonly spaceId: string

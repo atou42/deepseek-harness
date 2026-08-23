@@ -147,3 +147,15 @@ The generic seam now validates and publishes a provider-labelled `authentication
 Three regression suites first failed at the registry, presentation, and Cohub provider boundaries, then passed with 23 tests after the implementation. A dedicated test also proves anonymous-to-authenticated event refresh and a separate failure test proves account transport errors stay visible. Client aggregate type-check, scoped lint, workspace constraints, browser build, and the combined DSH-Cohub verifier pass.
 
 The isolated preview DSH process was restarted on port `3081` while its port `5173` proxy and the original `3080`/`3000` processes remained separate. Shared-browser verification of the real Work shows the sign-in status, no raw error, a working Cohub Account login button, and no console errors. No real login or billable request was performed. No Cohub code was changed and nothing was pushed.
+
+## 2026-08-23 · Native Cohub Agent Sessions in the DSH shell
+
+Every capable Cohub Space now exposes two explicit choices before execution: `Cohub Agent · Cloud` opens a Cohub-owned Session, while `DSH Agent · Local` keeps the existing local DSH Session with Space context. The searchable Workspace picker and remote tree use the same labels and routes. Existing Cohub Sessions open in a provider-owned conversation panel instead of entering the local DSH Agent loop.
+
+The Host submits prompts and cancellation to Cohub while retaining bearer credentials. The browser uses opaque Space, Session, and Turn identities, polls non-terminal work, keeps an uncertain submission draft, and reuses its idempotency identity for an unchanged retry. Late results from a conversation that is no longer active cannot overwrite the newly selected Session. Provider and malformed-data failures stay visible; there is no local execution fallback.
+
+Focused Host, provider, generic seam, picker, tree, and conversation tests pass. The full type check and production build pass. A real assembled Web snapshot boots the Cohub overlay against a local fake API boundary and proves the searchable dual-mode choice, Host authorization, cloud prompt submission, Cohub-retained result, and cloud ownership label in Chromium. The focused snapshot passes in both refresh and replay modes.
+
+The native Cohub browser provider is now a runtime dependency of the Web bundle so the profile module closure can resolve it. An obsolete development-only reference to the removed `dsh-client-web-react` workspace package was also removed; it had prevented lockfile reconciliation. `pnpm install --offline` completed without downloading packages.
+
+Live Cohub verification is still pending because the installed CLI reports `Not authenticated`. No real Session was created, no billable request was made, and nothing was pushed or published.

@@ -147,3 +147,15 @@ Space 内可见的 Work 为 <https://cohub.run/atou/deepseek-harness/w/deepseek-
 三组回归测试先在注册服务、显示界面和 Cohub Provider 三层稳定失败，实现后共二十三项测试通过。专门测试还证明了从匿名到已登录的事件刷新；另一项失败测试证明账号传输错误仍保持可见。客户端聚合类型检查、定向静态检查、工作区约束、浏览器构建和 DSH-Cohub 组合校验均通过。
 
 隔离预览 DSH 进程已在 `3081` 端口重启，`5173` 代理与原版 `3080`/`3000` 进程保持独立。共享浏览器打开真实 Work 后可见待登录提示，没有原始错误；Cohub 账号登录按钮可用，控制台没有错误。没有执行真实登录或计费请求，没有修改 Cohub 代码，也没有推送。
+
+## 2026-08-23 · 在 DSH 界面中原生使用 Cohub Agent Session
+
+每个具备能力的 Cohub Space 现在都会在执行前提供两个明确选项：`Cohub Agent · 云端` 打开由 Cohub 持有的 Session，`DSH Agent · 本地` 保留现有的本地 DSH Session，并把 Space 作为上下文。可搜索的工作区选择器和远端树使用同一套名称与路由。打开已有 Cohub Session 时会进入 Provider 持有的会话面板，不会进入本地 DSH Agent loop。
+
+Host 负责向 Cohub 提交 prompt 和取消请求，并持有 bearer 凭证。浏览器只使用不透明的 Space、Session 和 Turn 标识，轮询未结束的工作，保留结果未知的提交草稿，并在内容不变时复用幂等标识。旧会话的迟到结果不会覆盖新选择的 Session。Provider 与错误数据会明确报错，不会回退成本地执行。
+
+Host、Provider、通用能力接口、选择器、远端树和会话面板的定向测试通过。完整类型检查和生产构建通过。真实组装的 Web 快照在 Chromium 中启动 Cohub overlay，只用本地假 API 代替外部 Cohub，并验证可搜索的双模式选项、Host 授权、云端 prompt 提交、Cohub 保留的结果和云端归属标识。定向快照的刷新与回放模式均通过。
+
+原生 Cohub 浏览器 Provider 现在是 Web bundle 的运行时依赖，因此 Profile 的模块闭包可以解析它。同时移除了已经不存在的 `dsh-client-web-react` 工作区包的旧开发依赖；它原本会阻止锁文件校准。`pnpm install --offline` 已完成，没有下载新包。
+
+真实 Cohub 验证仍未完成，因为本机 CLI 当前返回 `Not authenticated`。没有创建真实 Session，没有发起计费请求，也没有推送或发布。

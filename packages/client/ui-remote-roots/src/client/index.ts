@@ -29,8 +29,9 @@ export function apply(ctx: ClientContext): void {
       inject: (): RemoteRootTreeInjected => ({
         hooks: { remoteRoots: ctx.remoteRoots.snapshot },
         list: (sourceId, request) => ctx.remoteRoots.list(sourceId, request),
-        activate: (sourceId, rootId, sessionId, sessionTitle) =>
-          ctx.remoteRoots.activate(sourceId, rootId, sessionId, sessionTitle),
+        openConversation: (sourceId, rootId, sessionId, sessionTitle) =>
+          ctx.remoteRoots.openConversation(sourceId, rootId, sessionId, sessionTitle),
+        startWorkspace: (sourceId, rootId) => ctx.remoteRoots.startWorkspace(sourceId, rootId),
       }),
     },
     RemoteRootTree,
@@ -42,6 +43,8 @@ export function apply(ctx: ClientContext): void {
         hooks: { remoteRoots: ctx.remoteRoots.snapshot },
         deactivate: () => { ctx.remoteRoots.deactivate() },
         readConversation: (sourceId, request) => ctx.remoteRoots.readConversation(sourceId, request),
+        sendConversationMessage: (sourceId, request) => ctx.remoteRoots.sendConversationMessage(sourceId, request),
+        abortConversationTurn: (sourceId, request) => ctx.remoteRoots.abortConversationTurn(sourceId, request),
       }),
     },
     RemoteConversationOverlay,

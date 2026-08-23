@@ -2,6 +2,8 @@
 
 状态：已实现
 
+本 Note 的只读交互选择已由 [在 DSH 中原生使用 Cohub Agent Session](2026-08-23-cohub-native-agent-sessions.zh.md) 部分取代。本 Note 仍负责 Space 与 Session 导航。
+
 [English](2026-08-16-cohub-space-session-navigation.md) | 中文
 
 ## 问题

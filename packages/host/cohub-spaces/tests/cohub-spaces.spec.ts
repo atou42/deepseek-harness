@@ -82,6 +82,8 @@ describe('CohubSpacesGateway', () => {
       { method: 'listSpaces', invocation: { kind: 'direct' } },
       { method: 'listSessions', invocation: { kind: 'direct' } },
       { method: 'getConversation', invocation: { kind: 'direct' } },
+      { method: 'sendPrompt', invocation: { kind: 'direct' } },
+      { method: 'abortTurn', invocation: { kind: 'direct' } },
       { method: 'getDshSessionStart', invocation: { kind: 'direct' } },
       { method: 'bindDshSession', invocation: { kind: 'direct' } },
       { method: 'listDirectory', invocation: { kind: 'direct' } },
@@ -246,6 +248,75 @@ describe('CohubSpacesGateway', () => {
     expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
       'https://cohub.example.test/api/sessions/session-1/turns?direction=older&limit=100',
     ])
+  })
+
+  it('submits a native Cohub Agent Turn without assembling a DSH prompt', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json({
+      mode: 'immediate',
+      session: {
+        id: 'session-1', spaceId: 'space-1', title: null, status: 'active',
+        latestMessageText: 'Ship the native mode', updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+      turn: {
+        id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'queued', intent: 'followup',
+        userText: 'Ship the native mode', assistantText: null, errorMessage: null,
+        createdAt: '2026-08-23T12:00:00.000Z', updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces } = await boot()
+    const native = spaces as unknown as {
+      sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<unknown>
+    }
+
+    await expect(native.sendPrompt('space-1', null, 'Ship the native mode', 'message-1')).resolves.toEqual({
+      spaceId: 'space-1',
+      session: {
+        id: 'session-1', spaceId: 'space-1', title: '', status: 'active',
+        latestMessageText: 'Ship the native mode', updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+      turn: {
+        id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'queued',
+        userText: 'Ship the native mode',
+        createdAt: '2026-08-23T12:00:00.000Z', updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+    })
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://cohub.example.test/api/spaces/space-1/prompt')
+    expect(JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)).toEqual({
+      content: [{ type: 'text', text: 'Ship the native mode' }],
+      clientMessageId: 'message-1',
+      accessMode: 'full_access',
+    })
+  })
+
+  it('verifies the Cohub Turn owner before aborting its native Agent run', async () => {
+    const session = {
+      id: 'session-1', spaceId: 'space-1', title: 'Native chat', status: 'active',
+      updatedAt: '2026-08-23T12:00:01.000Z',
+    }
+    const turn = {
+      id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'running', intent: 'followup',
+      userText: 'Keep working', assistantText: null, errorMessage: null,
+      createdAt: '2026-08-23T12:00:00.000Z', updatedAt: '2026-08-23T12:00:01.000Z',
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ session, turn }))
+      .mockResolvedValueOnce(json({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { spaces } = await boot()
+    const native = spaces as unknown as {
+      abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<unknown>
+    }
+
+    await expect(native.abortTurn('space-1', 'session-1', 'turn-1')).resolves.toEqual({
+      ok: true, spaceId: 'space-1', sessionId: 'session-1', turnId: 'turn-1',
+    })
+    expect(fetchMock.mock.calls.map(call => [String(call[0]), (call[1] as RequestInit | undefined)?.method ?? 'GET'])).toEqual([
+      ['https://cohub.example.test/api/sessions/session-1/turns/turn-1', 'GET'],
+      ['https://cohub.example.test/api/sessions/session-1/abort', 'POST'],
+    ])
+    expect(JSON.parse((fetchMock.mock.calls[1]?.[1] as RequestInit).body as string)).toEqual({ turnId: 'turn-1' })
   })
 
   it('lists accessible Spaces and preserves file, folder, and symlink kinds', async () => {

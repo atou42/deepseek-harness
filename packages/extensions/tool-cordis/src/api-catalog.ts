@@ -672,6 +672,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'The complete retained conversation view.',
       },
       {
+        signature: '@Remote(\'sendPrompt\') sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission>',
+        description: 'Submit one prompt directly to Cohub Agent, creating a Session when sessionId is null.',
+        parameters: [{ name: 'spaceId', description: 'Cohub Space identity.' }, { name: 'sessionId', description: 'Existing Cohub Session identity, or null for a new Session.' }, { name: 'content', description: 'User-authored text.' }, { name: 'clientMessageId', description: 'Caller-generated idempotency identity.' }],
+        returns: 'The Cohub-owned Session and accepted Turn.',
+      },
+      {
+        signature: '@Remote(\'abortTurn\') abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<CohubAbortTurnResult>',
+        description: 'Abort one running native Cohub Agent Turn after verifying its Space ownership.',
+        parameters: [{ name: 'spaceId', description: 'Cohub Space identity.' }, { name: 'sessionId', description: 'Cohub Session identity.' }, { name: 'turnId', description: 'Cohub Turn identity.' }],
+        returns: 'Confirmation that Cohub accepted the abort.',
+      },
+      {
         signature: '@Remote(\'getDshSessionStart\') getDshSessionStart(spaceId: string): Promise<CohubDshSessionStart>',
         description: 'Resolve the local DSH working directory used for a Cohub-bound Session.',
         parameters: [{ name: 'spaceId', description: 'Cohub Space identity.' }],
@@ -3208,6 +3220,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CodeRunResult {\n    value?: CodeJsonValue;\n    logs: string[];\n    error?: CodeRunFailure;\n}',
   },
   {
+    name: 'CohubAbortTurnResult',
+    declaration: 'export interface CohubAbortTurnResult {\n    readonly ok: true;\n    readonly spaceId: string;\n    readonly sessionId: string;\n    readonly turnId: string;\n}',
+  },
+  {
     name: 'CohubAccountObservable',
     declaration: 'export interface CohubAccountObservable {\n    getSnapshot(): CohubAccountSnapshot;\n    subscribe(listener: () => void): () => void;\n}',
   },
@@ -3262,6 +3278,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CohubLogoutResult',
     declaration: 'export interface CohubLogoutResult {\n    readonly revocationWarning?: string;\n}',
+  },
+  {
+    name: 'CohubPromptSubmission',
+    declaration: 'export interface CohubPromptSubmission {\n    readonly spaceId: string;\n    readonly session: CohubSessionView;\n    readonly turn: CohubTurnView;\n}',
   },
   {
     name: 'CohubRemoteLogoutResult',

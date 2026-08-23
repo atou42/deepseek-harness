@@ -759,7 +759,8 @@ export function WorkspaceBrowser({
   archiveSession,
   insertSessionBefore,
   createWorkspace,
-  activateRemote,
+  startRemoteWorkspace,
+  openRemoteConversation,
   searchSessions,
   searchResultLimit,
   useDirectoryFlow,
@@ -1110,7 +1111,8 @@ export function WorkspaceBrowser({
           anchorRef={wsPlusRef}
           useWorkspaces={useWorkspaces}
           useRemoteRoots={useRemoteRoots}
-          activateRemote={activateRemote}
+          startRemoteWorkspace={startRemoteWorkspace}
+          openRemoteConversation={openRemoteConversation}
           createWorkspace={createWorkspace}
           useDirectoryFlow={useDirectoryFlow}
           renderDirectoryFlow={owner => renderSlot('sidebar.workspaces.directoryFlow', owner)}

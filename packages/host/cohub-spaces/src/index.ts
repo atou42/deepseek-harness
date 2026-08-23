@@ -24,6 +24,8 @@ import type {
   CohubSpaceTextFile,
   CohubSpaceView,
   CohubSpaceWriteResult,
+  CohubAbortTurnResult,
+  CohubPromptSubmission,
   CohubSessionView,
   CohubTurnView,
 } from './types.ts'
@@ -83,7 +85,10 @@ function parseBindingText(value: string): SpaceBinding | undefined {
 }
 
 function waitForPoll(ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.reject(signal.reason)
+  const reason = (): Error => signal.reason instanceof Error
+    ? signal.reason
+    : new Error('cohub-spaces: polling aborted', { cause: signal.reason })
+  if (signal.aborted) return Promise.reject(reason())
   return new Promise((resolve, reject) => {
     const timer = setTimeout(done, ms)
     function done(): void {
@@ -92,7 +97,7 @@ function waitForPoll(ms: number, signal: AbortSignal): Promise<void> {
     }
     function aborted(): void {
       clearTimeout(timer)
-      reject(signal.reason)
+      reject(reason())
     }
     signal.addEventListener('abort', aborted, { once: true })
   })
@@ -279,6 +284,38 @@ interface TurnPage {
   readonly nextCursor?: string
 }
 
+function parseTurn(value: unknown, sessionId: string, field: string): CohubTurnView {
+  const turn = record(value, field)
+  const id = nonBlank(turn.id, `${field} id`)
+  if (turn.sessionId !== sessionId) throw new TypeError(`cohub-spaces: turn "${id}" does not belong to Session "${sessionId}"`)
+  const userText = optionalText(turn.userText, `turn "${id}" userText`)
+  const assistantText = optionalText(turn.assistantText, `turn "${id}" assistantText`)
+  const errorMessage = optionalText(turn.errorMessage, `turn "${id}" errorMessage`)
+  return Object.freeze({
+    id,
+    sessionId,
+    sequence: safeInteger(turn.sequence, `turn "${id}" sequence`),
+    status: nonBlank(turn.status, `turn "${id}" status`),
+    ...userText === undefined ? {} : { userText },
+    ...assistantText === undefined ? {} : { assistantText },
+    ...errorMessage === undefined ? {} : { errorMessage },
+    createdAt: isoInstant(turn.createdAt, `turn "${id}" createdAt`),
+    updatedAt: isoInstant(turn.updatedAt, `turn "${id}" updatedAt`),
+  })
+}
+
+function parseTurnResponse(value: unknown, spaceId: string, sessionId?: string): {
+  readonly session: CohubSessionView
+  readonly turn: CohubTurnView
+} {
+  const body = record(value, 'turn response')
+  const session = parseSession(body.session, spaceId, 'turn response session')
+  if (sessionId !== undefined && session.id !== sessionId) {
+    throw new TypeError('cohub-spaces: turn response Session does not match request')
+  }
+  return Object.freeze({ session, turn: parseTurn(body.turn, session.id, 'turn response turn') })
+}
+
 function parseTurnPage(value: unknown, spaceId: string, sessionId: string): TurnPage {
   const body = record(value, 'turns response')
   const session = parseSession(body.session, spaceId, 'turns response session')
@@ -286,25 +323,7 @@ function parseTurnPage(value: unknown, spaceId: string, sessionId: string): Turn
   if (!Array.isArray(body.turns)) throw new TypeError('cohub-spaces: turns response turns must be an array')
   if (typeof body.hasMore !== 'boolean') throw new TypeError('cohub-spaces: turns response hasMore must be a boolean')
   const nextCursor = body.hasMore ? String(safeInteger(body.nextCursor, 'turns response nextCursor')) : undefined
-  const turns = body.turns.map((value, index) => {
-    const turn = record(value, `turn ${String(index)}`)
-    const id = nonBlank(turn.id, `turn ${String(index)} id`)
-    if (turn.sessionId !== sessionId) throw new TypeError(`cohub-spaces: turn "${id}" does not belong to Session "${sessionId}"`)
-    const userText = optionalText(turn.userText, `turn "${id}" userText`)
-    const assistantText = optionalText(turn.assistantText, `turn "${id}" assistantText`)
-    const errorMessage = optionalText(turn.errorMessage, `turn "${id}" errorMessage`)
-    return Object.freeze({
-      id,
-      sessionId,
-      sequence: safeInteger(turn.sequence, `turn "${id}" sequence`),
-      status: nonBlank(turn.status, `turn "${id}" status`),
-      ...userText === undefined ? {} : { userText },
-      ...assistantText === undefined ? {} : { assistantText },
-      ...errorMessage === undefined ? {} : { errorMessage },
-      createdAt: isoInstant(turn.createdAt, `turn "${id}" createdAt`),
-      updatedAt: isoInstant(turn.updatedAt, `turn "${id}" updatedAt`),
-    })
-  })
+  const turns = body.turns.map((value, index) => parseTurn(value, sessionId, `turn ${String(index)}`))
   return Object.freeze({ session, turns: Object.freeze(turns), hasMore: body.hasMore, ...nextCursor ? { nextCursor } : {} })
 }
 
@@ -472,6 +491,31 @@ export class CohubSpacesGateway extends TypertRemoteService {
   }
 
   /**
+   * Submit one prompt directly to Cohub Agent, creating a Session when sessionId is null.
+   * @param spaceId Cohub Space identity.
+   * @param sessionId Existing Cohub Session identity, or null for a new Session.
+   * @param content User-authored text.
+   * @param clientMessageId Caller-generated idempotency identity.
+   * @returns The Cohub-owned Session and accepted Turn.
+   */
+  @Remote('sendPrompt')
+  sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission> {
+    return this.track(this.sendPromptImpl(spaceId, sessionId, content, clientMessageId))
+  }
+
+  /**
+   * Abort one running native Cohub Agent Turn after verifying its Space ownership.
+   * @param spaceId Cohub Space identity.
+   * @param sessionId Cohub Session identity.
+   * @param turnId Cohub Turn identity.
+   * @returns Confirmation that Cohub accepted the abort.
+   */
+  @Remote('abortTurn')
+  abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<CohubAbortTurnResult> {
+    return this.track(this.abortTurnImpl(spaceId, sessionId, turnId))
+  }
+
+  /**
    * Resolve the local DSH working directory used for a Cohub-bound Session.
    * @param spaceId Cohub Space identity.
    * @returns The verified Space identity and local cwd anchor.
@@ -600,6 +644,54 @@ export class CohubSpacesGateway extends TypertRemoteService {
     } while (true)
     turns.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
     return Object.freeze({ spaceId, session, turns: Object.freeze(turns) })
+  }
+
+  private async sendPromptImpl(
+    spaceIdValue: string,
+    sessionIdValue: string | null,
+    contentValue: string,
+    clientMessageIdValue: string,
+  ): Promise<CohubPromptSubmission> {
+    const spaceId = nonBlank(spaceIdValue, 'spaceId')
+    const sessionId = sessionIdValue === null ? undefined : nonBlank(sessionIdValue, 'sessionId')
+    const content = nonBlank(contentValue, 'content')
+    const clientMessageId = nonBlank(clientMessageIdValue, 'clientMessageId')
+    const { data } = await this.request(`/api/spaces/${encodeURIComponent(spaceId)}/prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...sessionId === undefined ? {} : { sessionId },
+        content: [{ type: 'text', text: content }],
+        clientMessageId,
+        accessMode: 'full_access',
+      }),
+    })
+    const body = record(data, 'prompt response')
+    if (body.mode !== 'immediate') throw new TypeError('cohub-spaces: prompt response must be immediate')
+    const accepted = parseTurnResponse(body, spaceId, sessionId)
+    return Object.freeze({ spaceId, ...accepted })
+  }
+
+  private async abortTurnImpl(
+    spaceIdValue: string,
+    sessionIdValue: string,
+    turnIdValue: string,
+  ): Promise<CohubAbortTurnResult> {
+    const spaceId = nonBlank(spaceIdValue, 'spaceId')
+    const sessionId = nonBlank(sessionIdValue, 'sessionId')
+    const turnId = nonBlank(turnIdValue, 'turnId')
+    const verified = await this.request(
+      `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}`,
+    )
+    const current = parseTurnResponse(verified.data, spaceId, sessionId)
+    if (current.turn.id !== turnId) throw new TypeError('cohub-spaces: turn response Turn does not match request')
+    const { data } = await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turnId }),
+    })
+    if (record(data, 'abort response').ok !== true) throw new TypeError('cohub-spaces: abort response was not successful')
+    return Object.freeze({ ok: true, spaceId, sessionId, turnId })
   }
 
   private async bindDshSessionImpl(spaceIdValue: string, dshSessionIdValue: string): Promise<CohubDshSessionBinding> {

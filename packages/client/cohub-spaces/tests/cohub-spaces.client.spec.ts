@@ -18,6 +18,8 @@ function remote(overrides: Partial<CohubSpacesRemoteApi> = {}): CohubSpacesRemot
     listSpaces: vi.fn(async () => []),
     listSessions: vi.fn(async (spaceId: string) => ({ spaceId, sessions: [] })),
     getConversation: vi.fn(async () => { throw new Error('no Session selected') }),
+    sendPrompt: vi.fn(async () => { throw new Error('no prompt expected') }),
+    abortTurn: vi.fn(async () => { throw new Error('no abort expected') }),
     ...overrides,
   }
 }
@@ -53,11 +55,11 @@ describe('CohubSpacesRemoteRootSource', () => {
         roots: [
           {
             id: 'space-1', title: 'World Bible', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: 'interactive' },
           },
           {
             id: 'space-2', title: 'Drafts', marker: { kind: 'cloud', label: 'Cohub' },
-            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: true },
+            capabilities: { browse: true, read: false, write: false, workspace: true, conversation: 'interactive' },
           },
         ],
       }],
@@ -108,7 +110,7 @@ describe('CohubSpacesRemoteRootSource', () => {
 
   it('gives an untitled Cohub Session a stable display name', async () => {
     const provider = source(remote({
-      listSessions: vi.fn(async spaceId => ({
+      listSessions: vi.fn(async (spaceId: string) => ({
         spaceId,
         sessions: [{
           id: '18c0d6a5-0079-47e4-8808-9c384b5d3b4b', spaceId, title: '   ', status: 'active',
@@ -146,6 +148,60 @@ describe('CohubSpacesRemoteRootSource', () => {
     await expect(provider.startWorkspace({ rootId })).resolves.toBeUndefined()
     expect(getConversation).toHaveBeenCalledWith('space-1', 'session-1')
     expect(startDshSession).toHaveBeenCalledWith('space-1')
+    provider.dispose()
+  })
+
+  it('routes native messages and aborts through opaque Cohub Session and Turn identities', async () => {
+    const sendPrompt = vi.fn(async () => ({
+      spaceId: 'space-1',
+      session: {
+        id: 'session-1', spaceId: 'space-1', title: 'Native chat', status: 'active',
+        updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+      turn: {
+        id: 'turn-1', sessionId: 'session-1', sequence: 1, status: 'queued', userText: 'hello',
+        createdAt: '2026-08-23T12:00:00.000Z', updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+    }))
+    const abortTurn = vi.fn(async () => ({
+      ok: true as const, spaceId: 'space-1', sessionId: 'session-1', turnId: 'turn-1',
+    }))
+    const api = remote()
+    Object.assign(api, { sendPrompt, abortTurn })
+    const provider = source(api)
+    const native = provider as unknown as {
+      sendConversationMessage(request: {
+        rootId: RemoteResourceId
+        sessionId?: RemoteResourceId
+        content: string
+        clientMessageId: string
+      }): Promise<unknown>
+      abortConversationTurn(request: {
+        rootId: RemoteResourceId
+        sessionId: RemoteResourceId
+        turnId: RemoteResourceId
+      }): Promise<unknown>
+    }
+    const rootId = 'space-1' as RemoteResourceId
+
+    const submission = await native.sendConversationMessage({
+      rootId, content: 'hello', clientMessageId: 'message-1',
+    }) as { session: { id: RemoteResourceId }; turn: { id: RemoteResourceId } }
+    expect(submission).toMatchObject({
+      rootId,
+      session: { id: JSON.stringify(['space-1', 'session-1']), title: 'Native chat' },
+      turn: { id: JSON.stringify(['space-1', 'session-1', 'turn-1']), status: 'queued', userText: 'hello' },
+    })
+    expect(sendPrompt).toHaveBeenCalledWith('space-1', null, 'hello', 'message-1')
+
+    await expect(native.abortConversationTurn({
+      rootId,
+      sessionId: submission.session.id,
+      turnId: submission.turn.id,
+    })).resolves.toEqual({
+      ok: true, rootId, sessionId: submission.session.id, turnId: submission.turn.id,
+    })
+    expect(abortTurn).toHaveBeenCalledWith('space-1', 'session-1', 'turn-1')
     provider.dispose()
   })
 

@@ -1,6 +1,6 @@
 import type { PropsLocale, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  RemoteConversationView, RemoteDirectoryListing,
+  RemoteConversationAbortResult, RemoteConversationSubmission, RemoteConversationView, RemoteDirectoryListing,
   RemoteResourceId, RemoteRootSourceId, RemoteRootsSnapshot,
 } from '@deepseek-ai/dsh-client-remote-roots/client'
 
@@ -12,12 +12,13 @@ export interface RemoteRootTreeInjected {
     readonly parentId: RemoteResourceId
     readonly signal?: AbortSignal
   }): Promise<RemoteDirectoryListing>
-  activate(
+  openConversation(
     sourceId: RemoteRootSourceId,
     rootId: RemoteResourceId,
     sessionId?: RemoteResourceId,
     sessionTitle?: string,
   ): Promise<void>
+  startWorkspace(sourceId: RemoteRootSourceId, rootId: RemoteResourceId): Promise<void>
 }
 
 /** Render props for the remote-root navigation tree. */
@@ -32,7 +33,21 @@ export interface RemoteConversationOverlayInjected {
   readConversation(sourceId: RemoteRootSourceId, request: {
     readonly rootId: RemoteResourceId
     readonly sessionId?: RemoteResourceId
+    readonly signal?: AbortSignal
   }): Promise<RemoteConversationView>
+  sendConversationMessage(sourceId: RemoteRootSourceId, request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly content: string
+    readonly clientMessageId: string
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationSubmission>
+  abortConversationTurn(sourceId: RemoteRootSourceId, request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId: RemoteResourceId
+    readonly turnId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationAbortResult>
 }
 
 /** Render props for the selected remote conversation. */

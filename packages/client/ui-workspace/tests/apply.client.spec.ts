@@ -27,13 +27,18 @@ async function bench() {
   const renameSession = vi.fn(async (title: string) => ({ ok: true, value: { title, seq: 1 } }))
   const binding = vi.fn(() => ({ session: { rename: renameSession } }))
   const fork = vi.fn(async () => 'forked' as never)
-  const activateRemote = vi.fn()
+  const startRemoteWorkspace = vi.fn()
+  const openRemoteConversation = vi.fn()
   const remoteSnapshot = { getSnapshot: () => ({ revision: 0, sources: [] }), subscribe: () => () => {} }
   ctx.provide('workspaces', {
     create, startSession, rename, insertSessionBefore,
   } as never)
   ctx.provide('sessions', { open, clear, search, searchResultLimit: 20, binding, fork } as never)
-  ctx.provide('remoteRoots', { snapshot: remoteSnapshot, activate: activateRemote } as never)
+  ctx.provide('remoteRoots', {
+    snapshot: remoteSnapshot,
+    startWorkspace: startRemoteWorkspace,
+    openConversation: openRemoteConversation,
+  } as never)
   ctx.provide('connection', {
     hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
   } as never)
@@ -45,7 +50,8 @@ async function bench() {
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, startSession, rename,
-    insertSessionBefore, open, clear, search, renameSession, binding, fork, activateRemote, remoteSnapshot,
+    insertSessionBefore, open, clear, search, renameSession, binding, fork,
+    startRemoteWorkspace, openRemoteConversation, remoteSnapshot,
   }
 }
 
@@ -118,8 +124,10 @@ describe('ui-workspace apply', () => {
     const picker = (b.slots.entries('conversation.hero.workspace')[0]!.inject as () => WorkspacePickerInjected)()
     await picker.createWorkspace({ path: '/tmp/project' })
     expect(b.create).toHaveBeenCalledWith({ path: '/tmp/project' })
-    picker.activateRemote('cohub' as never, 'space' as never)
-    expect(b.activateRemote).toHaveBeenCalledWith('cohub', 'space')
+    await picker.startRemoteWorkspace('cohub' as never, 'space' as never)
+    expect(b.startRemoteWorkspace).toHaveBeenCalledWith('cohub', 'space')
+    await picker.openRemoteConversation('cohub' as never, 'space' as never)
+    expect(b.openRemoteConversation).toHaveBeenCalledWith('cohub', 'space')
   })
 
   it('declares directory-flow and remote-root holes and reports flow occupancy per surface', async () => {

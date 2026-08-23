@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向浏览器的通用远程根能力接口。Provider 注册带明确标识的远程根列表，以及基于不透明 ID 的浏览、读取、写入、可选 DSH Session 启动和可选只读会话历史。契约不包含本地路径，不会把远程根接纳为本地 Workspace，也不会修改 Session cwd。激活根节点时，注册服务会等待 Provider 完成 DSH 启动后再发布选中状态；Session 叶节点只打开供应方历史。注册服务会拒绝结构错误的发布和返回，并在 Provider 插件卸载时撤销状态和订阅。正常的未登录状态会显示为带 Provider 名称的待认证状态，不会当成错误；传输失败、身份不匹配、重复条目、无效元数据以及不支持的结果仍会明确失败。
+面向浏览器的通用远程根能力接口。Provider 注册带明确标识的远程根列表，以及基于不透明 ID 的浏览、读取、写入、可选本地 DSH Session 启动和可选只读或可交互的 Provider 会话。两个启动入口彼此独立：`startWorkspace` 交给 Provider 准备本地 DSH，`openConversation` 只选择 Provider 持有的历史，不会启动本地 Agent；可交互来源还可以提交和取消 Provider Turn。契约不包含本地路径，不会把远程根接纳为本地 Workspace，也不会修改 Session cwd。注册服务会校验所有发布和返回，只在匹配的 Provider 提交成功后更新当前目标，并在 Provider 插件卸载时撤销状态和订阅。正常的未登录状态会显示为带 Provider 名称的待认证状态，不会当成错误；传输失败、身份不匹配、重复条目、无效元数据以及不支持的结果仍会明确失败。
 
 ## 模型体验
 

@@ -131,6 +131,25 @@ Typed Remote service backed only by Cohub account tokens and platform HTTP.
 @Remote('getConversation') getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView>
 
 /**
+ * Submit one prompt directly to Cohub Agent, creating a Session when sessionId is null.
+ * @param spaceId Cohub Space identity.
+ * @param sessionId Existing Cohub Session identity, or null for a new Session.
+ * @param content User-authored text.
+ * @param clientMessageId Caller-generated idempotency identity.
+ * @returns The Cohub-owned Session and accepted Turn.
+ */
+@Remote('sendPrompt') sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission>
+
+/**
+ * Abort one running native Cohub Agent Turn after verifying its Space ownership.
+ * @param spaceId Cohub Space identity.
+ * @param sessionId Cohub Session identity.
+ * @param turnId Cohub Turn identity.
+ * @returns Confirmation that Cohub accepted the abort.
+ */
+@Remote('abortTurn') abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<CohubAbortTurnResult>
+
+/**
  * Resolve the local DSH working directory used for a Cohub-bound Session.
  * @param spaceId Cohub Space identity.
  * @returns The verified Space identity and local cwd anchor.

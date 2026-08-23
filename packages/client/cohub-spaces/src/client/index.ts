@@ -2,7 +2,7 @@
 
 import type { ClientContext, ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  CohubAccountSnapshot, CohubConversationView,
+  CohubAbortTurnResult, CohubAccountSnapshot, CohubConversationView, CohubPromptSubmission,
   CohubSpaceSessionList,
   CohubSpaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
@@ -25,6 +25,8 @@ export interface CohubSpacesRemoteApi {
   listSpaces(): Promise<readonly CohubSpaceView[]>
   listSessions(spaceId: string): Promise<CohubSpaceSessionList>
   getConversation(spaceId: string, sessionId: string): Promise<CohubConversationView>
+  sendPrompt(spaceId: string, sessionId: string | null, content: string, clientMessageId: string): Promise<CohubPromptSubmission>
+  abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<CohubAbortTurnResult>
 }
 
 type RemoteAnswer<T> =
@@ -66,6 +68,19 @@ function sessionId(rootId: RemoteResourceId, value: RemoteResourceId): string {
 
 function turnResourceId(spaceId: string, sessionId: string, turnId: string): RemoteResourceId {
   return JSON.stringify([spaceId, sessionId, turnId]) as RemoteResourceId
+}
+
+function turnId(rootId: RemoteResourceId, sessionResourceId: RemoteResourceId, value: RemoteResourceId): string {
+  const rawSessionId = sessionId(rootId, sessionResourceId)
+  let parsed: unknown
+  try { parsed = JSON.parse(value) } catch (error) {
+    throw new TypeError('client-cohub-spaces: Turn identity is malformed', { cause: error })
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 3 || parsed[0] !== rootId || parsed[1] !== rawSessionId
+    || typeof parsed[2] !== 'string' || parsed[2].trim().length === 0) {
+    throw new TypeError('client-cohub-spaces: Turn identity does not match the requested Cohub Session')
+  }
+  return parsed[2]
 }
 
 function sessionDisplayName(session: { readonly id: string; readonly title: string; readonly latestMessageText?: string }): string {
@@ -145,7 +160,7 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
           title: space.title,
           marker: Object.freeze({ kind: 'cloud' as const, label: 'Cohub' }),
           capabilities: Object.freeze({
-            browse: true as const, read: false, write: false, workspace: true, conversation: true,
+            browse: true as const, read: false, write: false, workspace: true, conversation: 'interactive' as const,
           }),
         })
       })
@@ -216,6 +231,64 @@ export class CohubSpacesRemoteRootSource implements RemoteRootSource {
     await abortable(this.startDshSession(request.rootId), request.signal)
   }
 
+  async sendConversationMessage(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly content: string
+    readonly clientMessageId: string
+    readonly signal?: AbortSignal
+  }) {
+    const rawSessionId = request.sessionId === undefined ? null : sessionId(request.rootId, request.sessionId)
+    const value = await abortable(
+      this.remote.sendPrompt(request.rootId, rawSessionId, request.content, request.clientMessageId),
+      request.signal,
+    )
+    if (value.spaceId !== request.rootId || (rawSessionId !== null && value.session.id !== rawSessionId)) {
+      throw new TypeError('client-cohub-spaces: prompt result does not match the requested Cohub Session')
+    }
+    const opaqueSessionId = resourceId(value.spaceId, value.session.id)
+    return Object.freeze({
+      rootId: request.rootId,
+      session: Object.freeze({
+        id: opaqueSessionId,
+        title: sessionDisplayName(value.session),
+        status: value.session.status,
+      }),
+      turn: Object.freeze({
+        id: turnResourceId(value.spaceId, value.session.id, value.turn.id),
+        sequence: value.turn.sequence,
+        status: value.turn.status,
+        ...value.turn.userText === undefined ? {} : { userText: value.turn.userText },
+        ...value.turn.assistantText === undefined ? {} : { assistantText: value.turn.assistantText },
+        ...value.turn.errorMessage === undefined ? {} : { errorMessage: value.turn.errorMessage },
+        updatedAt: value.turn.updatedAt,
+      }),
+    })
+  }
+
+  async abortConversationTurn(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId: RemoteResourceId
+    readonly turnId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }) {
+    const rawSessionId = sessionId(request.rootId, request.sessionId)
+    const rawTurnId = turnId(request.rootId, request.sessionId, request.turnId)
+    const value = await abortable(
+      this.remote.abortTurn(request.rootId, rawSessionId, rawTurnId),
+      request.signal,
+    )
+    if (value.spaceId !== request.rootId || value.sessionId !== rawSessionId || value.turnId !== rawTurnId) {
+      throw new TypeError('client-cohub-spaces: abort result does not match the requested Cohub Turn')
+    }
+    return Object.freeze({
+      ok: true as const,
+      rootId: request.rootId,
+      sessionId: request.sessionId,
+      turnId: request.turnId,
+    })
+  }
+
   /** Stop publishing snapshots and release local listeners. */
   dispose(): void {
     if (this.closed) return
@@ -240,7 +313,15 @@ export const inject = ['remote', 'remote.cohubAccount', 'remote.cohubSpaces', 'r
 
 /** Register the Cohub source and refresh it whenever the Host account changes. */
 export function apply(ctx: ClientContext): () => void {
-  const carrier = ctx.remote.cohubSpaces
+  const carrier = ctx.remote.cohubSpaces as typeof ctx.remote.cohubSpaces & {
+    sendPrompt(
+      spaceId: string,
+      sessionId: string | null,
+      content: string,
+      clientMessageId: string,
+    ): Promise<RemoteAnswer<CohubPromptSubmission>>
+    abortTurn(spaceId: string, sessionId: string, turnId: string): Promise<RemoteAnswer<CohubAbortTurnResult>>
+  }
   const accountCarrier = ctx.remote.cohubAccount
   const source = new CohubSpacesRemoteRootSource({
     getAccount: async () => unwrapRemote('cohubAccount.getAccount', await accountCarrier.getAccount()),
@@ -249,18 +330,18 @@ export function apply(ctx: ClientContext): () => void {
       unwrapRemote('cohubSpaces.listSessions', await carrier.listSessions(spaceId)),
     getConversation: async (spaceId, sessionId) =>
       unwrapRemote('cohubSpaces.getConversation', await carrier.getConversation(spaceId, sessionId)),
+    sendPrompt: async (spaceId, sessionId, content, clientMessageId) =>
+      unwrapRemote('cohubSpaces.sendPrompt', await carrier.sendPrompt(spaceId, sessionId, content, clientMessageId)),
+    abortTurn: async (spaceId, sessionId, turnId) =>
+      unwrapRemote('cohubSpaces.abortTurn', await carrier.abortTurn(spaceId, sessionId, turnId)),
   }, async (spaceId) => {
-    const startCarrier = carrier as typeof carrier & {
-      getDshSessionStart(spaceId: string): Promise<RemoteAnswer<{ spaceId: string; cwd: string }>>
-      bindDshSession(spaceId: string, sessionId: string): Promise<RemoteAnswer<unknown>>
-    }
-    const start = unwrapRemote('cohubSpaces.getDshSessionStart', await startCarrier.getDshSessionStart(spaceId))
+    const start = unwrapRemote('cohubSpaces.getDshSessionStart', await carrier.getDshSessionStart(spaceId))
     if (start.spaceId !== spaceId || typeof start.cwd !== 'string' || start.cwd.trim().length === 0) {
       throw new TypeError('client-cohub-spaces: DSH Session start context does not match the requested Space')
     }
     const workspace = await ctx.workspaces.create({ path: start.cwd })
     const sessionId = await ctx.sessions.create({ workspaceId: workspace.workspaceId })
-    unwrapRemote('cohubSpaces.bindDshSession', await startCarrier.bindDshSession(spaceId, sessionId))
+    unwrapRemote('cohubSpaces.bindDshSession', await carrier.bindDshSession(spaceId, sessionId))
     ctx.sessions.open(sessionId)
   })
   const unregister = ctx.remoteRoots.register(source)

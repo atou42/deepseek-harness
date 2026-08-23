@@ -2,6 +2,8 @@
 
 Status: implemented
 
+The read-only interaction choice in this note is partially superseded by [Native Cohub Agent Sessions in DSH](2026-08-23-cohub-native-agent-sessions.md). This note still owns Space and Session navigation.
+
 English | [中文](2026-08-16-cohub-space-session-navigation.zh.md)
 
 ## Problem

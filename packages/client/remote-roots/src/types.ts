@@ -19,8 +19,8 @@ export interface RemoteRootCapabilities {
   readonly write: boolean
   /** Selecting the root starts an ordinary DSH Session with provider context. */
   readonly workspace?: boolean
-  /** The root exposes provider-owned Sessions as read-only history. */
-  readonly conversation?: boolean
+  /** The root exposes provider-owned Sessions for history or native interaction. */
+  readonly conversation?: 'read' | 'interactive'
 }
 
 /** One top-level remote root shown beside, but never converted into, local Workspaces. */
@@ -57,6 +57,7 @@ export interface RemoteConversationTarget {
   readonly sourceId: RemoteRootSourceId
   readonly rootId: RemoteResourceId
   readonly rootTitle: string
+  readonly conversation: 'read' | 'interactive'
   readonly sessionId?: RemoteResourceId
   readonly sessionTitle?: string
 }
@@ -81,6 +82,21 @@ export interface RemoteConversationView {
     readonly status: string
   }
   readonly turns: readonly RemoteConversationTurn[]
+}
+
+/** One provider-owned Session and Turn accepted from an interactive conversation. */
+export interface RemoteConversationSubmission {
+  readonly rootId: RemoteResourceId
+  readonly session: NonNullable<RemoteConversationView['session']>
+  readonly turn: RemoteConversationTurn
+}
+
+/** Confirmation that the provider accepted an abort for one Turn. */
+export interface RemoteConversationAbortResult {
+  readonly ok: true
+  readonly rootId: RemoteResourceId
+  readonly sessionId: RemoteResourceId
+  readonly turnId: RemoteResourceId
 }
 
 /** A child entry within a provider-owned root. Parent identities remain opaque. */
@@ -149,4 +165,17 @@ export interface RemoteRootSource {
     readonly sessionId?: RemoteResourceId
     readonly signal?: AbortSignal
   }): Promise<RemoteConversationView>
+  sendConversationMessage?(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId?: RemoteResourceId
+    readonly content: string
+    readonly clientMessageId: string
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationSubmission>
+  abortConversationTurn?(request: {
+    readonly rootId: RemoteResourceId
+    readonly sessionId: RemoteResourceId
+    readonly turnId: RemoteResourceId
+    readonly signal?: AbortSignal
+  }): Promise<RemoteConversationAbortResult>
 }
