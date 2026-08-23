@@ -34,6 +34,36 @@ function readySnapshot(): RemoteRootsSnapshot {
 }
 
 describe('RemoteRootTree', () => {
+  it('filters remote Workspace roots by the owner search query', () => {
+    const snapshot = readySnapshot()
+    const source = createSnapshotStore<RemoteRootsSnapshot>({
+      ...snapshot,
+      sources: snapshot.sources.map(item => item.status === 'ready'
+        ? {
+          ...item,
+          roots: [
+            ...item.roots,
+            {
+              ...item.roots[0]!,
+              id: rid('space:opaque-2'),
+              title: '数据工作区',
+            },
+          ],
+        }
+        : item),
+    })
+    const view = render(
+      <RemoteRootTree
+        query="数据"
+        useRemoteRoots={bindSnapshotSelector(source)} list={vi.fn()}
+        openConversation={vi.fn()} t={t}
+      />,
+    )
+
+    expect(view.getByText('数据工作区')).toBeTruthy()
+    expect(view.queryByText('故事空间')).toBeNull()
+  })
+
   it('opens a provider-owned Session in the selected Space', async () => {
     const source = createSnapshotStore(readySnapshot())
     const openConversation = vi.fn(async () => {})
@@ -44,6 +74,7 @@ describe('RemoteRootTree', () => {
     }))
     const view = render(
       <RemoteRootTree
+        query=""
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
         openConversation={openConversation} t={t}
       />,
@@ -63,6 +94,7 @@ describe('RemoteRootTree', () => {
     }))
     const view = render(
       <RemoteRootTree
+        query=""
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
         openConversation={openConversation} t={t}
       />,
@@ -87,6 +119,7 @@ describe('RemoteRootTree', () => {
     }))
     const view = render(
       <RemoteRootTree
+        query=""
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
         openConversation={vi.fn()} t={t}
       />,
@@ -120,6 +153,7 @@ describe('RemoteRootTree', () => {
     })
     const view = render(
       <RemoteRootTree
+        query=""
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
         openConversation={vi.fn()} t={t}
       />,
@@ -149,6 +183,7 @@ describe('RemoteRootTree', () => {
     ) => pending)
     const view = render(
       <RemoteRootTree
+        query=""
         useRemoteRoots={bindSnapshotSelector(source)} list={list}
         openConversation={vi.fn()} t={t}
       />,
@@ -169,6 +204,7 @@ describe('RemoteRootTree', () => {
     })
     const view = render(
       <RemoteRootTree
+        query=""
         useRemoteRoots={bindSnapshotSelector(source)} list={vi.fn()}
         openConversation={vi.fn()} t={t}
       />,

@@ -8,7 +8,7 @@
 
 ## 模型体验
 
-原生 Cohub 会话会显示 Cohub 当前模型目录，并在每个 Turn 转发用户可选的模型与思考强度；执行方仍是 Cohub。本地 DSH Session 中的 `@Cohub Space` 引用仍只会序列化明确的 Space 名称和 id，不会改变该本地 Session 的模型。
+无，因为这个浏览器侧 Provider 只公开 Cohub 根与引用元数据，不会组装或修改模型请求。
 
 #### KV Cache 影响
 

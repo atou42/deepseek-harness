@@ -1,13 +1,13 @@
 /**
  * The workspace/session browsing region filling the sidebar shell's
  * `sidebar.workspaces` hole: section header (title + view options + add
- * workspace), search, the grouped tree or flat list, and the workspace
+ * workspace), Workspace search, the grouped tree or flat list, and the workspace
  * dialogs. Wide state renders the full browser; rail state renders the two
  * region icons (search / add workspace) as 36px controls on the shell's shared
- * rail entry path, each requesting expansion through the owner share. Adding
- * is the header button's one action, so it raises the directory flow with no
- * menu in between; the flow and its error dialog live in WorkspacePicker
- * (same package — direct composition, no slot between them).
+ * rail entry path, each requesting expansion through the owner share. The add
+ * button selects an interactive remote root or the composed local directory
+ * flow; the flow and its error dialog live in WorkspacePicker (same package —
+ * direct composition, no slot between them).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
@@ -16,12 +16,12 @@ import {
   IconProjectAddOutline16, IconSearchOutline16, Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  SessionId, SessionListState, SessionSearchResultItem, WorkspaceId, WorkspaceView,
+  SessionId, SessionListState, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
-import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
-import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './rows/Rows.tsx'
+import { deriveFlat, deriveGroups, UNGROUPED_KEY } from './tree.ts'
+import { ProjectRowItem, SessionNodeItem } from './rows/Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY } from './stores.ts'
 import { WorkspacePickFlow } from './WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
@@ -31,22 +31,12 @@ import css from './WorkspaceBrowser.module.css'
  * focus() forces a synchronous layout and would jank the slide.
  */
 const EXPAND_SLIDE_MS = 300
-/** Pause between the latest keystroke and a Host content-search request. */
-const SEARCH_DEBOUNCE_MS = 250
-/** `session.search` wire bound, measured in JavaScript UTF-16 code units. */
-const SEARCH_QUERY_MAX_CODE_UNITS = 500
 /** Session rows visible per Workspace before the local overflow control. */
 const COLLAPSED_SESSION_LIMIT = 5
 
-/** Keep controlled input and RPC payload inside the session.search wire contract. */
-function sanitizeSearchQuery(value: string): string {
-  const withoutNul = value.replaceAll('\0', '')
-  if (withoutNul.length <= SEARCH_QUERY_MAX_CODE_UNITS) return withoutNul
-  let end = SEARCH_QUERY_MAX_CODE_UNITS
-  const last = withoutNul.charCodeAt(end - 1)
-  const next = withoutNul.charCodeAt(end)
-  if (last >= 0xD800 && last <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF) end--
-  return withoutNul.slice(0, end)
+/** Normalize Workspace titles, paths, and provider markers for local filtering. */
+function workspaceSearchText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase()
 }
 
 /** Immutable membership toggle for the local expand-all array. */
@@ -245,6 +235,8 @@ type SessionTreeProps = Pick<
   onSessionArchive: (sessionId: SessionNode['id']) => void
   /** Session order behavior: fixed after edits, or additionally promoted by user activity. */
   orderBy: SessionOrderBy
+  /** Hide the loose-session bucket while filtering Workspace roots. */
+  workspacesOnly?: boolean
 }
 
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
@@ -254,6 +246,7 @@ function SessionTree({
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+  workspacesOnly = false,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -271,17 +264,18 @@ function SessionTree({
     : (workspaces.find(w => w.sessionIds.includes(current))?.workspaceId as string | undefined)
       ?? UNGROUPED_KEY
   useEffect(() => {
-    if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
+    if (workspacesOnly || current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
     setGroupExpanded(currentGroup, true)
-  }, [current, currentGroup, setGroupExpanded, groupExpansion])
+  }, [current, currentGroup, setGroupExpanded, groupExpansion, workspacesOnly])
   const expandedGroups = useMemo(
     () => Object.entries(groupExpansion).filter(([, expanded]) => expanded).map(([key]) => key),
     [groupExpansion],
   )
   const ungroupedSessionIds = useMemo(() => {
+    if (workspacesOnly) return []
     const accounted = new Set(workspaces.flatMap(workspace => workspace.sessionIds))
     return list.ids.filter(id => list.byId[id] !== undefined && !accounted.has(id))
-  }, [list, workspaces])
+  }, [list, workspaces, workspacesOnly])
   useEffect(() => {
     if (list.phase !== 'ready') return
     const switchedToUpdated = previousOrderBy.current !== 'updated' && orderBy === 'updated'
@@ -291,7 +285,7 @@ function SessionTree({
         key: workspace.workspaceId as string,
         sessionIds: workspace.sessionIds.filter(id => list.byId[id] !== undefined),
       })),
-      { key: UNGROUPED_KEY, sessionIds: ungroupedSessionIds },
+      ...(workspacesOnly ? [] : [{ key: UNGROUPED_KEY, sessionIds: ungroupedSessionIds }]),
     ]
     for (const { key, sessionIds } of accounts) {
       const previousOrder = sessionOrderByAccount[key]
@@ -308,7 +302,10 @@ function SessionTree({
         syncSessionOrderAccount(key, next.order.map(id => id as string), next.updatedAt)
       }
     }
-  }, [list, orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, ungroupedSessionIds, workspaces])
+  }, [
+    list, orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount,
+    syncSessionOrderAccount, ungroupedSessionIds, workspaces, workspacesOnly,
+  ])
   const orderedWorkspaces = useMemo(() => {
     return workspaces.map((workspace) => {
       const stored = sessionOrderByAccount[workspace.workspaceId as string]
@@ -329,6 +326,9 @@ function SessionTree({
     }),
     [list, orderedWorkspaces, archivedSessionIds, expandedGroups, sessionOrderByAccount],
   )
+  const visibleGroups = workspacesOnly
+    ? groups.filter(group => group.workspaceId !== undefined)
+    : groups
   const now = Date.now()
   const commitSessionDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
     if (sessionDropCommitted.current) return
@@ -378,8 +378,8 @@ function SessionTree({
       console.warn('workspace reorder rejected:', reason)
     })
   }
-  const workspaceDropAtListStart = groups[0]?.workspaceId !== undefined
-    && workspaceDrag?.over?.id === groups[0].workspaceId
+  const workspaceDropAtListStart = visibleGroups[0]?.workspaceId !== undefined
+    && workspaceDrag?.over?.id === visibleGroups[0].workspaceId
     && workspaceDrag.over.half === 'before'
 
   return (
@@ -390,15 +390,15 @@ function SessionTree({
         role="tree"
         aria-label={t('section.sessions')}
       >
-        {groups.length === 0 && (
+        {visibleGroups.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
         )}
-        {groups.map((group) => {
+        {visibleGroups.map((group) => {
           const workspaceId = group.workspaceId
           const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
             ? workspaceDrag.over.half
             : null
-          const workspaceDragProps = workspaceId === undefined ? undefined : {
+          const workspaceDragProps = workspaceId === undefined || workspacesOnly ? undefined : {
             start: () => {
               workspaceDropCommitted.current = false
               setWorkspaceDrag({ workspaceId, over: null })
@@ -665,77 +665,6 @@ function FlatList({
   )
 }
 
-interface RemoteSearchState {
-  query: string
-  status: 'idle' | 'loading' | 'ready' | 'error'
-  items: readonly SessionSearchResultItem[]
-  hasMore: boolean
-}
-
-/** Flat search body: local metadata matches plus the current Host result page. */
-function SearchResults({
-  useSessions,
-  open,
-  workspaces,
-  archivedSessionIds,
-  query,
-  remote,
-  resultLimit,
-  t,
-}: Pick<SessionTreeProps, 'useSessions' | 'open' | 't'> & {
-  workspaces: readonly WorkspaceView[]
-  archivedSessionIds: readonly SessionNode['id'][]
-  query: string
-  remote: RemoteSearchState
-  resultLimit: number
-}) {
-  const list = useSessions(s => s)
-  const currentRemote = remote.query === query
-    ? remote
-    : { query, status: 'loading' as const, items: [], hasMore: false }
-  const results = useMemo(
-    () => deriveSearchResults(list, workspaces, query, archivedSessionIds, currentRemote, resultLimit),
-    [list, workspaces, query, archivedSessionIds, currentRemote, resultLimit],
-  )
-  const pending = currentRemote.status === 'loading'
-  const failed = currentRemote.status === 'error'
-
-  return (
-    <div className={clsx(css.treeBody, css.wide)}>
-      <div className={css.list}>
-        <div className={css.searchTree} role="tree" aria-label={t('search.results.aria')}>
-          {results.items.map(result => (
-            <SearchResultItem
-              key={result.id}
-              result={result}
-              currentId={list.current}
-              onOpen={open}
-              t={t}
-            />
-          ))}
-        </div>
-        {pending && (
-          <div className={css.searchStatus} role="status">{t('search.pending')}</div>
-        )}
-        {failed && (
-          <div className={css.searchWarning} role="status">
-            {t('search.unavailable')}
-          </div>
-        )}
-        {!pending && results.items.length === 0 && (
-          <div className={css.empty}>{t('search.noMatches')}</div>
-        )}
-        {results.hasMore && (
-          <div className={css.searchStatus}>
-            {t('search.hasMore', { n: resultLimit })}
-          </div>
-        )}
-      </div>
-      <span className={css.fade} />
-    </div>
-  )
-}
-
 /**
  * Render the browsing region.
  * @param props - composed slot props (shell owner share + store + injected actions).
@@ -760,8 +689,6 @@ export function WorkspaceBrowser({
   insertSessionBefore,
   createWorkspace,
   openRemoteConversation,
-  searchSessions,
-  searchResultLimit,
   useDirectoryFlow,
   useHostDescription,
   renderSlot,
@@ -769,6 +696,7 @@ export function WorkspaceBrowser({
 }: WorkspaceBrowserProps) {
   const home = useHostDescription(description => description?.home)
   const workspaces = useWorkspaces(state => state.items)
+  const remoteSources = useRemoteRoots(state => state.sources)
   const workspacePhase = useWorkspaces(state => state.phase)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
   // Live occupancy of this surface's directory-flow hole (the same source the
@@ -816,13 +744,16 @@ export function WorkspaceBrowser({
   // does not silently drop an in-progress filter.
   const [query, setQuery] = useState('')
   const [searchExpanded, setSearchExpanded] = useState(false)
-  const normalizedQuery = sanitizeSearchQuery(query).trim()
-  const [remoteSearch, setRemoteSearch] = useState<RemoteSearchState>({
-    query: '',
-    status: 'idle',
-    items: [],
-    hasMore: false,
-  })
+  const normalizedQuery = workspaceSearchText(query.trim())
+  const filteredWorkspaces = normalizedQuery === ''
+    ? workspaces
+    : workspaces.filter(workspace => workspaceSearchText(`${workspace.title} ${workspace.path}`).includes(normalizedQuery))
+  const matchingRemoteRootCount = remoteSources.reduce((count, source) => source.status === 'ready'
+    ? count + source.roots.filter(root => workspaceSearchText(`${root.title} ${root.marker.label}`).includes(normalizedQuery)).length
+    : count, 0)
+  const remoteConversationAvailable = remoteSources.some(source => source.status === 'ready'
+    && source.roots.some(root => root.capabilities.conversation === 'interactive'))
+  const remoteRootsSettled = remoteSources.every(source => source.status !== 'loading')
   const searchRoot = useRef<HTMLDivElement | null>(null)
   const searchInput = useRef<HTMLInputElement | null>(null)
   // Section-header ＋ opens the picker menu (same popover in wide and rail
@@ -865,43 +796,6 @@ export function WorkspaceBrowser({
     document.addEventListener('click', onClick)
     return () => { document.removeEventListener('click', onClick) }
   }, [normalizedQuery, wide, searchExpanded, searchOnExpand])
-
-  useEffect(() => {
-    if (normalizedQuery === '') {
-      setRemoteSearch({ query: '', status: 'idle', items: [], hasMore: false })
-      return
-    }
-    const controller = new AbortController()
-    setRemoteSearch({
-      query: normalizedQuery,
-      status: 'loading',
-      items: [],
-      hasMore: false,
-    })
-    const timer = window.setTimeout(() => {
-      searchSessions(normalizedQuery, controller.signal).then((result) => {
-        if (controller.signal.aborted) return
-        setRemoteSearch({
-          query: normalizedQuery,
-          status: 'ready',
-          items: result.items,
-          hasMore: result.hasMore,
-        })
-      }).catch(() => {
-        if (controller.signal.aborted) return
-        setRemoteSearch({
-          query: normalizedQuery,
-          status: 'error',
-          items: [],
-          hasMore: false,
-        })
-      })
-    }, SEARCH_DEBOUNCE_MS)
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [normalizedQuery, searchSessions])
 
   // Rename dialog (browser-owned so it outlives row unmounts during collapse).
   const [renameTarget, setRenameTarget] = useState<{ workspaceId: WorkspaceId; currentTitle: string } | null>(null)
@@ -1032,7 +926,7 @@ export function WorkspaceBrowser({
                 <button
                   type="button"
                   className={css.searchButton}
-                  aria-label={t('search.sessions.aria')}
+                  aria-label={t('search.workspaces.aria')}
                   aria-expanded={searchExpanded}
                   onClick={() => {
                     setWsPickerOpen(false)
@@ -1047,10 +941,9 @@ export function WorkspaceBrowser({
                 className={css.searchInput}
                 type="text"
                 placeholder={t('search.placeholder')}
-                maxLength={SEARCH_QUERY_MAX_CODE_UNITS}
                 value={query}
                 tabIndex={searchExpanded ? 0 : -1}
-                onChange={(e) => { setQuery(sanitizeSearchQuery(e.target.value)) }}
+                onChange={(e) => { setQuery(e.target.value) }}
                 onKeyDown={(e) => {
                   if (e.key !== 'Escape') return
                   setQuery('')
@@ -1084,10 +977,9 @@ export function WorkspaceBrowser({
               t={t}
             />
           )}
-          {/* Adding is the button's one action, so a composition with no
-              picking affordance has nothing to offer here: the region hides the
-              button rather than leaving a dead one in the header. */}
-          {directoryFlowAvailable && (
+          {/* The source picker is present while at least one local or remote
+              Workspace source can answer the gesture. */}
+          {(directoryFlowAvailable || remoteConversationAvailable) && (
             <Tooltip label={t('workspace.add')} side="bottom" delayMs={500}>
               <button
                 ref={wsPlusRef}
@@ -1130,7 +1022,7 @@ export function WorkspaceBrowser({
           <button
             type="button"
             className={css.searchButton}
-            aria-label={t('search.sessions.aria')}
+            aria-label={t('search.workspaces.aria')}
             onClick={() => {
               setSearchExpanded(true)
               setSearchOnExpand(true)
@@ -1145,70 +1037,90 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
-        {/* Remote roots are adjacent presentation only. Search continues to
-            target local Session content, so its active result view hides
-            this independently supplied tree. */}
-        {wide && normalizedQuery === ''
-          && renderSlot('sidebar.workspaces.remoteRoots', {})}
-        {wide && (normalizedQuery !== ''
+        {wide && renderSlot('sidebar.workspaces.remoteRoots', { query: normalizedQuery })}
+        {wide && normalizedQuery !== '' && filteredWorkspaces.length > 0 && (
+          <SessionTree
+            useSessions={useSessions}
+            onSessionRename={onSessionRename}
+            onSessionArchive={onSessionArchive}
+            forkSession={forkSession}
+            workspaces={filteredWorkspaces}
+            workspacesOnly
+            groupExpansion={groupExpansion}
+            setGroupExpanded={actions.setGroupExpanded}
+            sessionOrderByAccount={sessionOrderByAccount}
+            sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
+            syncSessionOrderAccount={actions.syncSessionOrderAccount}
+            setSessionOrder={actions.setSessionOrder}
+            archivedSessionIds={archivedSessionIds}
+            startSession={startSession}
+            open={open}
+            insertWorkspaceBefore={insertWorkspaceBefore}
+            insertSessionBefore={insertSessionBefore}
+            orderBy={orderBy}
+            home={home}
+            t={t}
+            onRenameRequest={(workspaceId, currentTitle) => {
+              setRenameTarget({ workspaceId, currentTitle })
+              setRenameDraft(currentTitle)
+              setRenameError(null)
+            }}
+            onDeleteRequest={(workspaceId, title) => {
+              setDeleteTarget({ workspaceId, title })
+              setDeleteError(null)
+            }}
+          />
+        )}
+        {wide && normalizedQuery !== '' && remoteRootsSettled
+          && filteredWorkspaces.length === 0 && matchingRemoteRootCount === 0 && (
+          <div className={css.empty}>{t('search.noMatches')}</div>
+        )}
+        {wide && normalizedQuery === '' && (groupBy === 'flat'
           ? (
-            <SearchResults
-              useSessions={useSessions}
-              open={open}
-              workspaces={workspaces}
+            <FlatList
+              useSessions={useSessions} open={open} forkSession={forkSession}
+              onSessionRename={onSessionRename} onSessionArchive={onSessionArchive}
               archivedSessionIds={archivedSessionIds}
-              query={normalizedQuery}
-              remote={remoteSearch}
-              resultLimit={searchResultLimit}
+              orderBy={orderBy}
+              sessionOrderByAccount={sessionOrderByAccount}
+              sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
+              syncSessionOrderAccount={actions.syncSessionOrderAccount}
+              setSessionOrder={actions.setSessionOrder}
               t={t}
             />
           )
-          : groupBy === 'flat'
-            ? (
-              <FlatList
-                useSessions={useSessions} open={open} forkSession={forkSession}
-                onSessionRename={onSessionRename} onSessionArchive={onSessionArchive}
-                archivedSessionIds={archivedSessionIds}
-                orderBy={orderBy}
-                sessionOrderByAccount={sessionOrderByAccount}
-                sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
-                syncSessionOrderAccount={actions.syncSessionOrderAccount}
-                setSessionOrder={actions.setSessionOrder}
-                t={t}
-              />
-            )
-            : (
-              <SessionTree
-                useSessions={useSessions}
-                onSessionRename={onSessionRename}
-                onSessionArchive={onSessionArchive}
-                forkSession={forkSession}
-                workspaces={workspaces}
-                groupExpansion={groupExpansion}
-                setGroupExpanded={actions.setGroupExpanded}
-                sessionOrderByAccount={sessionOrderByAccount}
-                sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
-                syncSessionOrderAccount={actions.syncSessionOrderAccount}
-                setSessionOrder={actions.setSessionOrder}
-                archivedSessionIds={archivedSessionIds}
-                startSession={startSession}
-                open={open}
-                insertWorkspaceBefore={insertWorkspaceBefore}
-                insertSessionBefore={insertSessionBefore}
-                orderBy={orderBy}
-                home={home}
-                t={t}
-                onRenameRequest={(workspaceId, currentTitle) => {
-                  setRenameTarget({ workspaceId, currentTitle })
-                  setRenameDraft(currentTitle)
-                  setRenameError(null)
-                }}
-                onDeleteRequest={(workspaceId, title) => {
-                  setDeleteTarget({ workspaceId, title })
-                  setDeleteError(null)
-                }}
-              />
-            ))}
+          : (
+            <SessionTree
+              useSessions={useSessions}
+              onSessionRename={onSessionRename}
+              onSessionArchive={onSessionArchive}
+              forkSession={forkSession}
+              workspaces={workspaces}
+              groupExpansion={groupExpansion}
+              setGroupExpanded={actions.setGroupExpanded}
+              sessionOrderByAccount={sessionOrderByAccount}
+              sessionUpdatedAtByAccount={sessionUpdatedAtByAccount}
+              syncSessionOrderAccount={actions.syncSessionOrderAccount}
+              setSessionOrder={actions.setSessionOrder}
+              archivedSessionIds={archivedSessionIds}
+              startSession={startSession}
+              open={open}
+              insertWorkspaceBefore={insertWorkspaceBefore}
+              insertSessionBefore={insertSessionBefore}
+              orderBy={orderBy}
+              home={home}
+              t={t}
+              onRenameRequest={(workspaceId, currentTitle) => {
+                setRenameTarget({ workspaceId, currentTitle })
+                setRenameDraft(currentTitle)
+                setRenameError(null)
+              }}
+              onDeleteRequest={(workspaceId, title) => {
+                setDeleteTarget({ workspaceId, title })
+                setDeleteError(null)
+              }}
+            />
+          ))}
       </div>
 
       <Modal

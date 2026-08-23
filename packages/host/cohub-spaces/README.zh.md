@@ -15,7 +15,7 @@ Host 侧 Cohub Space 适配器。它只通过唯一的 `ctx.cohubAccount` 所有
 
 ## 模型体验
 
-原生云端 Turn 会先校验 Cohub 模型目录，以及可选的 Provider/模型与思考强度覆盖值，再转发给 Cohub，不会自行发明默认值。本地 DSH Agent 保持不变，只会获得简短的 `@Cohub Space` 使用说明和四个云端工具。
+无，因为这个 Host 侧适配器只传输 Cohub 数据与操作，不注册面向模型的 prompt、工具或上下文。
 
 #### KV Cache 影响
 

@@ -102,13 +102,6 @@ describe('ui-workspace apply', () => {
     browser.open('session' as never)
     expect(b.deactivateRemoteConversation).toHaveBeenCalledTimes(3)
     expect(b.open).toHaveBeenCalledWith('session')
-    const signal = new AbortController().signal
-    await expect(browser.searchSessions('match', signal)).resolves.toEqual({
-      items: [{ sessionId: 'session', snippet: 'match' }],
-      hasMore: false,
-    })
-    expect(b.search).toHaveBeenCalledWith('match', signal)
-    expect(browser.searchResultLimit).toBe(20)
     await browser.renameSession('session' as never, 'renamed session')
     expect(b.binding).toHaveBeenCalledWith('session')
     expect(b.renameSession).toHaveBeenCalledWith('renamed session')
@@ -156,19 +149,6 @@ describe('ui-workspace apply', () => {
     dispose()
     expect(browser.hooks.directoryFlow.getSnapshot()).toBe(false)
     unsubscribe()
-  })
-
-  it('rejects the browser search callback on a runtime business error', async () => {
-    const b = await bench()
-    b.search.mockImplementationOnce(async () => ({
-      ok: false,
-      error: { code: 'internal', message: 'index unavailable', details: {} },
-    }) as never)
-    declare(b.slots, 'sidebar.workspaces')
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
-    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
-    await expect(browser.searchSessions('needle', new AbortController().signal))
-      .rejects.toThrow('index unavailable')
   })
 
   it('unregisters every entry on teardown', async () => {

@@ -559,7 +559,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/host/cohub-spaces/src/index.ts:36`](../packages/host/cohub-spaces/src/index.ts)
+Source: [`packages/host/cohub-spaces/src/index.ts:40`](../packages/host/cohub-spaces/src/index.ts)
 
 <a id="deepseek-aidsh-compaction-basic"></a>
 

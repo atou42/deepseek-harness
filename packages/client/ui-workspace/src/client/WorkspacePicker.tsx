@@ -5,8 +5,8 @@
  * registration. Directory picking itself lives in the composed flow package's
  * slot occupant (see the contract module doc): this core only opens the flow,
  * adopts the picked path, and owns the error surface. Adding a workspace has
- * exactly one route — pick a host directory, new or existing — because the
- * occupant's own create-folder affordance already covers creating one.
+ * exactly one local route — pick a host directory, new or existing — while
+ * interactive remote roots remain provider-owned selections.
  */
 import type { ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useState } from 'react'
@@ -54,7 +54,7 @@ export interface WorkspacePickFlowProps {
   onPick: (workspaceId: WorkspaceId) => void
   /** Close the popover (outside click / Escape / post-pick). */
   onClose: () => void
-  /** Only offer the add action, hide existing workspaces. */
+  /** Hide existing local Workspaces while retaining remote roots and the local add action. */
   addOnly?: boolean
   /** Menu opening direction relative to the anchor. */
   side?: 'bottom' | 'top' | 'right'
@@ -86,7 +86,7 @@ export function WorkspacePickFlow({
   const workspaceSnapshot = useWorkspaces(state => state)
   const remoteSnapshot = useRemoteRoots(state => state)
   const workspaces = workspaceSnapshot.items
-  const remoteEntries = addOnly ? [] : remoteSnapshot.sources.flatMap(source => source.status === 'ready'
+  const remoteEntries = remoteSnapshot.sources.flatMap(source => source.status === 'ready'
     ? source.roots.flatMap(root => root.capabilities.conversation === 'interactive' ? [{
       id: JSON.stringify(['remote', 'conversation', source.sourceId, root.id]),
       sourceId: source.sourceId,
@@ -129,9 +129,10 @@ export function WorkspacePickFlow({
     : []
   // With workspaces listed, the add action pins below the scroll region
   // (divider + always visible); otherwise it IS the menu.
-  const pinAdd = !addOnly && (workspaces.length > 0 || remoteEntries.length > 0)
+  const listedWorkspaces = addOnly ? [] : workspaces
+  const pinAdd = listedWorkspaces.length > 0 || remoteEntries.length > 0
   const normalizedQuery = searchText(query.trim())
-  const workspaceEntries = workspaces.map(workspace => ({
+  const workspaceEntries = listedWorkspaces.map(workspace => ({
     id: workspace.workspaceId,
     label: workspace.title,
     searchText: searchText(workspace.title),
@@ -197,9 +198,10 @@ export function WorkspacePickFlow({
   // would consume it (close the popover, raise the flow). An empty list is
   // only final once the baseline lands — until then the menu stays up with its
   // loading status instead of jumping into a flow the arriving list would have
-  // made unnecessary; the add-only surface lists nothing and never waits.
+  // made unnecessary. The add-only surface omits existing local Workspaces,
+  // but waits for remote roots before deciding whether local add is the only target.
   const remoteSettled = remoteSnapshot.sources.every(source => source.status !== 'loading')
-  const listSettled = addOnly || (workspaceSnapshot.phase === 'ready' && remoteSettled)
+  const listSettled = (addOnly || workspaceSnapshot.phase === 'ready') && remoteSettled
   const addIsTheOnlyEntry = !pinAdd && listSettled && addEntries.length === 1
   // `flowBusy` gates this exactly as it disables the equivalent menu entry: a
   // pick still being adopted owns the surface until it settles.
@@ -252,7 +254,7 @@ export function WorkspacePickFlow({
         open={open && !addIsTheOnlyEntry && !menuIsEmpty}
         anchor={null}
         items={items}
-        {...!addOnly && pinAdd ? {
+        {...pinAdd ? {
           header: (
             <Input
               className={css.pickerSearch ?? ''}

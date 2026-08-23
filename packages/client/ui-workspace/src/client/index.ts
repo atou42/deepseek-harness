@@ -86,12 +86,6 @@ export function apply(ctx: ClientContext): void {
   const hostDescription = connection.hostDescription
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
 
-  const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
-    const result = await ctx.sessions.search(query, signal)
-    if (!result.ok) throw new Error(result.error.message)
-    return result.value
-  }
-
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
   // source identity): true while the surface's directory-flow hole is filled.
   const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
@@ -118,8 +112,6 @@ export function apply(ctx: ClientContext): void {
       deactivateRemoteConversation()
       ctx.sessions.open(sessionId)
     },
-    searchSessions,
-    searchResultLimit: ctx.sessions.searchResultLimit,
     renameSession: async (sessionId, title) => {
       // Row → session-face hop: rename is a per-session verb (ISession), not
       // a list-service verb; the binding resolves any listed session.

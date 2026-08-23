@@ -1,4 +1,4 @@
-import type { PropsLocale, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+import type { OwnerOf, PropsLocale, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   RemoteConversationAbortResult, RemoteConversationModelCatalog, RemoteConversationSelection,
   RemoteConversationSubmission, RemoteConversationView, RemoteDirectoryListing,
@@ -24,7 +24,7 @@ export interface RemoteRootTreeInjected {
 /** Render props for the remote-root navigation tree. */
 export type RemoteRootTreeProps = Omit<RemoteRootTreeInjected, 'hooks'> & {
   readonly useRemoteRoots: SnapshotSelectorHook<RemoteRootsSnapshot>
-} & PropsLocale<'remoteRoots'>
+} & OwnerOf<'sidebar.workspaces.remoteRoots'> & PropsLocale<'remoteRoots'>
 
 /** Provider-neutral conversation overlay actions. */
 export interface RemoteConversationOverlayInjected {

@@ -206,14 +206,26 @@ function Folder({ sourceId, rootId, id, name, marker, capabilities, depth, list,
   )
 }
 
-export function RemoteRootTree({ useRemoteRoots, list, openConversation, t }: RemoteRootTreeProps) {
+function searchText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase()
+}
+
+export function RemoteRootTree({ query, useRemoteRoots, list, openConversation, t }: RemoteRootTreeProps) {
   const sources = useRemoteRoots(snapshot => snapshot.sources)
-  if (sources.length === 0) return null
+  const normalizedQuery = searchText(query.trim())
+  const visibleSources = sources.map(source => source.status === 'ready' && normalizedQuery !== ''
+    ? {
+      ...source,
+      roots: source.roots.filter(root => searchText(`${root.title} ${root.marker.label}`).includes(normalizedQuery)),
+    }
+    : source)
+  const hasVisibleContent = visibleSources.some(source => source.status !== 'ready' || source.roots.length > 0)
+  if (sources.length === 0 || !hasVisibleContent) return null
   return (
     <section className={css.root} aria-label={t('section')}>
       <div className={css.heading}>{t('section')}</div>
       <div role="tree" aria-label={t('tree.aria')}>
-        {sources.map(source => (
+        {visibleSources.map(source => (
           <div key={source.sourceId} role="none" data-remote-source={source.sourceId}>
             {source.status === 'loading' && <div className={css.status} role="status">{t('source.loading')}</div>}
             {source.status === 'authentication-required' && (

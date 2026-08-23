@@ -15,7 +15,7 @@ The implementation calls the Cohub platform HTTP API directly and has no Cohub C
 
 ## Model Experience
 
-For native cloud Turns, the adapter validates Cohub's model catalog and the optional provider/model and thinking-level override before forwarding them. It does not invent defaults. Local DSH Agents remain unchanged: they receive only the stable `@Cohub Space` instruction and four explicit cloud tools.
+None, as this Host-side adapter transports Cohub data and operations without registering model-facing prompts, tools, or context.
 
 #### KV Cache effect
 

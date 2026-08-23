@@ -103,7 +103,12 @@ function normalized(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase()
 }
 
-/** Build the local-composer @ source over the provider's current cloud roots. */
+/**
+ * Build the local-composer @ source over the provider's current cloud roots.
+ *
+ * @param snapshot - Live Cohub provider state used to enumerate Space references.
+ * @returns An input-trigger source that inserts a selected Cohub Space reference.
+ */
 export function createCohubSpaceReferenceSource(
   snapshot: ObservableSnapshot<RemoteRootSourceSnapshot>,
 ): InputTriggerSource {
